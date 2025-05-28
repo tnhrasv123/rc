@@ -1,0 +1,61 @@
+# File: stats.sk
+# Path: race-clicker/gui/stats.sk
+# Description: Statistics displays
+
+options:
+    prefix: &6&lRaceClicker &8» # Example prefix
+
+# --- Phase 3: Complete GUI Systems ---
+# Create Additional GUI Menus
+# - TODO: Statistics GUI with visual elements
+#   - Achievement progress bars (integrates with achievements.sk)
+#   - Performance graphs (using item displays - advanced)
+#   - Comparison with server averages (requires global data tracking)
+
+# Command to open the statistics GUI
+command /stats:
+    aliases: /rcstats, /profil
+    trigger:
+        openStatsGUI(player)
+
+function openStatsGUI(p: player):
+    create a gui with virtual chest inventory with 4 rows named "&8&nPlayer Statistics":
+        # Fetch player data (examples, ensure these are set in data.sk)
+        set {_clicks} to {player::%{_p}'s uuid%::clicks} ? 0
+        set {_speed_level} to {player::%{_p}'s uuid%::speed-level} ? 1
+        set {_autoclicker_level} to {player::%{_p}'s uuid%::autoclicker-level} ? 0
+        set {_prestige_level} to {player::%{_p}'s uuid%::prestige-level} ? 0
+        set {_races_won} to {player::%{_p}'s uuid%::stats::races_won} ? 0
+
+        # Display stats
+        make gui slot 10 with paper named "&a&lTotal Clicks" with lore "&7You have accumulated: &e%{_clicks}% clicks."
+        make gui slot 12 with iron boots named "&b&lSpeed Level" with lore "&7Your current speed level: &e%{_speed_level}%."
+        make gui slot 14 with clock named "&c&lAuto-Clicker Level" with lore "&7Your auto-clicker level: &e%{_autoclicker_level}%."
+        make gui slot 16 with nether star named "&d&lPrestige Level" with lore "&7Your prestige level: &e%{_prestige_level}%."
+
+        make gui slot 20 with emerald named "&2&lRaces Won" with lore "&7Total races won: &e%{_races_won}%."
+
+        # TODO: Achievement Progress Bar (Conceptual)
+        # Example: Calculate completed / total achievements
+        # set {_achievements_completed} to size of {player::%{_p}'s uuid%::achievements::*}
+        # set {_total_achievements} to 20 # Example total
+        # make gui slot 22 with experience bottle named "&6&lAchievements" with lore "&7Progress: &e%{_achievements_completed}% / %{_total_achievements}%" and "&7(More details in /achievements)"
+
+        # TODO: Performance Graphs (Very Advanced - might require external tools or complex Skripting)
+        # This would likely involve dynamically creating item displays or maps.
+        # For now, a placeholder:
+        make gui slot 24 with map named "&5&lPerformance Graphs" with lore "&7(Coming Soon)"
+
+        # TODO: Comparison with server averages (Requires global data aggregation)
+        # make gui slot 26 with comparator named "&3&lServer Comparison" with lore "&7(Coming Soon)"
+
+        # Fill border with glass panes
+        loop 36 times:
+            if gui slot (loop-number - 1) is not set:
+                make gui slot (loop-number - 1) with gray stained glass pane named " "
+
+    open last gui to {_p}
+
+# Note: For achievement progress bars and performance graphs,
+# this GUI would likely call functions from achievements.sk or a dedicated visual elements script.
+# The data itself (e.g., number of achievements) would come from data.sk.

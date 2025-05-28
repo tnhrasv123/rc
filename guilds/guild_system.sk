@@ -1,0 +1,625 @@
+# File: guild_system.sk
+# Description: Guild system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Guild settings
+    guild_creation_cost: 50000 # Cost to create a guild
+    guild_name_length: [3, 20] # Minimum and maximum guild name length
+    guild_tag_length: [2, 5] # Minimum and maximum guild tag length
+    guild_max_members: 100 # Maximum guild members
+    guild_invite_cooldown: 5 minutes # Cooldown between guild invites
+    
+    # Guild ranks
+    guild_ranks:
+        - "Guild Master"
+        - "Officer"
+        - "Member"
+        - "Recruit"
+    
+    # Guild permissions
+    guild_permissions:
+        guild_master:
+            - "guild.kick"
+            - "guild.promote"
+            - "guild.demote"
+            - "guild.sethome"
+            - "guild.setrank"
+            - "guild.bank.admin"
+            - "guild.town.admin"
+        officer:
+            - "guild.kick"
+            - "guild.promote"
+            - "guild.demote"
+            - "guild.setrank"
+            - "guild.bank.access"
+            - "guild.town.access"
+        member:
+            - "guild.chat"
+            - "guild.leave"
+            - "guild.bank.deposit"
+            - "guild.town.access"
+        recruit:
+            - "guild.chat"
+            - "guild.leave"
+            - "guild.bank.deposit"
+            - "guild.town.access"
+    
+    # Guild town settings
+    guild_town_cost: 100000 # Cost to create a guild town
+    guild_town_max_level: 10 # Maximum guild town level
+    guild_town_upkeep: 5000 # Daily guild town upkeep
+    
+    # Guild bank settings
+    guild_bank_interest: 0.05 # 5% daily interest
+    guild_bank_max: 10000000 # Maximum guild bank amount
+
+# Variables:
+# {guild::%guild_name%::tag} = text (guild tag)
+# {guild::%guild_name%::master} = text (guild master)
+# {guild::%guild_name%::members::*} = text (guild members)
+# {guild::%guild_name%::rank::*} = text (guild member ranks)
+# {guild::%guild_name%::bank} = number (guild bank)
+# {guild::%guild_name%::town} = location (guild town)
+# {guild::%guild_name%::town_level} = number (guild town level)
+# {guild::%guild_name%::xp} = number (guild xp)
+# {guild::%guild_name%::level} = number (guild level)
+# {player::%uuid%::guild} = text (player's guild)
+# {player::%uuid%::guild_rank} = text (player's guild rank)
+# {guild::%guild_name%::town_upkeep} = number (guild town upkeep)
+
+# Function to create guild
+command /createguild <text>:
+    permission: raceclicker.guild.create
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has guild
+        if {player::%{_uuid}%::guild} is set:
+            send "{@prefix} &cYou are already in a guild!" to player
+            return
+            
+        # Check guild name
+        if length of arg-1 is not between {@guild_name_length::0} and {@guild_name_length::1}:
+            send "{@prefix} &cGuild name must be between %{guild_name_length::0}% and %{guild_name_length::1}% characters!" to player
+            return
+            
+        # Check if guild exists
+        if {guild::%arg-1%::master} is set:
+            send "{@prefix} &cGuild %{arg-1}% already exists!" to player
+            return
+            
+        # Check cost
+        if {player::%{_uuid}%::clickcoins} < {@guild_creation_cost}:
+            send "{@prefix} &cYou need %{@guild_creation_cost}% ClickCoins to create a guild!" to player
+            return
+            
+        # Create guild
+        set {guild::%arg-1%::master} to player
+        set {guild::%arg-1%::members::*} to [player]
+        set {guild::%arg-1%::rank::*} to ["Guild Master"]
+        set {guild::%arg-1%::bank} to 0
+        set {guild::%arg-1%::xp} to 0
+        set {guild::%arg-1%::level} to 1
+        set {guild::%arg-1%::town_level} to 1
+        set {guild::%arg-1%::town_upkeep} to {@guild_town_upkeep}
+        set {player::%{_uuid}%::guild} to arg-1
+        set {player::%{_uuid}%::guild_rank} to "Guild Master"
+        subtract {@guild_creation_cost} from {player::%{_uuid}%::clickcoins}
+        
+        # Announce guild creation
+        broadcast "{@prefix} &6Guild created: %{arg-1}%" to all players
+        send "{@prefix} &aCreated guild %{arg-1}%!" to player
+
+# Function to join guild
+command /joinguild <text>:
+    permission: raceclicker.guild.join
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has guild
+        if {player::%{_uuid}%::guild} is set:
+            send "{@prefix} &cYou are already in a guild!" to player
+            return
+            
+        # Check if guild exists
+        if {guild::%arg-1%::master} is not set:
+            send "{@prefix} &cGuild %{arg-1}% does not exist!" to player
+            return
+            
+        # Check guild size
+        if size of {guild::%arg-1%::members::*} >= {@guild_max_members}:
+            send "{@prefix} &cGuild %{arg-1}% is full!" to player
+            return
+            
+        # Add to guild
+        add player to {guild::%arg-1%::members::*}
+        add "Member" to {guild::%arg-1%::rank::*}
+        set {player::%{_uuid}%::guild} to arg-1
+        set {player::%{_uuid}%::guild_rank} to "Member"
+        
+        # Notify guild
+        loop {guild::%arg-1%::members::*}:
+            send "{@prefix} &6%{player}% joined guild %{arg-1}%" to loop-value
+        
+        send "{@prefix} &aJoined guild %{arg-1}%!" to player
+
+# Function to leave guild
+command /leaveguild:
+    permission: raceclicker.guild.leave
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has guild
+        if {player::%{_uuid}%::guild} is not set:
+            send "{@prefix} &cYou are not in a guild!" to player
+            return
+            
+        # Get guild info
+        set {_guild} to {player::%{_uuid}%::guild}
+        
+        # Remove from guild
+        remove player from {guild::%{_guild}%::members::*}
+        remove {player::%{_uuid}%::guild_rank} from {guild::%{_guild}%::rank::*}
+        set {player::%{_uuid}%::guild} to null
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6%{player}% left guild %{_guild}%" to loop-value
+        
+        send "{@prefix} &aLeft guild %{_guild}%!" to player
+
+# Function to kick member
+command /guildkick <player>:
+    permission: raceclicker.guild.kick
+    trigger:
+        set {_uuid} to player's uuid
+        set {_target} to arg-1
+        set {_target_uuid} to {_target}'s uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::guild_rank} is not "Guild Master" and {player::%{_uuid}%::guild_rank} is not "Officer":
+            send "{@prefix} &cYou don't have permission to kick!" to player
+            return
+            
+        # Check if target is in same guild
+        if {player::%{_target_uuid}%::guild} is not {player::%{_uuid}%::guild}:
+            send "{@prefix} &c%{_target}% is not in your guild!" to player
+            return
+            
+        # Kick member
+        set {_guild} to {player::%{_uuid}%::guild}
+        remove {_target} from {guild::%{_guild}%::members::*}
+        remove {player::%{_target_uuid}%::guild_rank} from {guild::%{_guild}%::rank::*}
+        set {player::%{_target_uuid}%::guild} to null
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6%{player}% kicked %{_target}% from guild %{_guild}%" to loop-value
+        
+        send "{@prefix} &aKicked %{_target}% from guild %{_guild}%!" to player
+
+# Function to promote member
+command /guildpromote <player>:
+    permission: raceclicker.guild.promote
+    trigger:
+        set {_uuid} to player's uuid
+        set {_target} to arg-1
+        set {_target_uuid} to {_target}'s uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::guild_rank} is not "Guild Master":
+            send "{@prefix} &cYou don't have permission to promote!" to player
+            return
+            
+        # Check if target is in same guild
+        if {player::%{_target_uuid}%::guild} is not {player::%{_uuid}%::guild}:
+            send "{@prefix} &c%{_target}% is not in your guild!" to player
+            return
+            
+        # Promote member
+        set {_guild} to {player::%{_uuid}%::guild}
+        set {_current_rank} to {player::%{_target_uuid}%::guild_rank}
+        set {_new_rank} to next element of {@guild_ranks::*} after {_current_rank}
+        
+        if {_new_rank} is not set:
+            send "{@prefix} &c%{_target}% is already at the highest rank!" to player
+            return
+            
+        # Update rank
+        remove {_current_rank} from {guild::%{_guild}%::rank::*}
+        add {_new_rank} to {guild::%{_guild}%::rank::*}
+        set {player::%{_target_uuid}%::guild_rank} to {_new_rank}
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6%{player}% promoted %{_target}% to %{_new_rank}%" to loop-value
+        
+        send "{@prefix} &aPromoted %{_target}% to %{_new_rank}%!" to player
+
+# Function to demote member
+command /guilddemote <player>:
+    permission: raceclicker.guild.demote
+    trigger:
+        set {_uuid} to player's uuid
+        set {_target} to arg-1
+        set {_target_uuid} to {_target}'s uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::guild_rank} is not "Guild Master":
+            send "{@prefix} &cYou don't have permission to demote!" to player
+            return
+            
+        # Check if target is in same guild
+        if {player::%{_target_uuid}%::guild} is not {player::%{_uuid}%::guild}:
+            send "{@prefix} &c%{_target}% is not in your guild!" to player
+            return
+            
+        # Demote member
+        set {_guild} to {player::%{_uuid}%::guild}
+        set {_current_rank} to {player::%{_target_uuid}%::guild_rank}
+        set {_new_rank} to previous element of {@guild_ranks::*} before {_current_rank}
+        
+        if {_new_rank} is not set:
+            send "{@prefix} &c%{_target}% is already at the lowest rank!" to player
+            return
+            
+        # Update rank
+        remove {_current_rank} from {guild::%{_guild}%::rank::*}
+        add {_new_rank} to {guild::%{_guild}%::rank::*}
+        set {player::%{_target_uuid}%::guild_rank} to {_new_rank}
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6%{player}% demoted %{_target}% to %{_new_rank}%" to loop-value
+        
+        send "{@prefix} &aDemoted %{_target}% to %{_new_rank}%!" to player
+
+# Function to set guild home
+command /guildsethome:
+    permission: raceclicker.guild.sethome
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::guild_rank} is not "Guild Master" and {player::%{_uuid}%::guild_rank} is not "Officer":
+            send "{@prefix} &cYou don't have permission to set guild home!" to player
+            return
+            
+        # Set guild home
+        set {_guild} to {player::%{_uuid}%::guild}
+        set {guild::%{_guild}%::town} to player's location
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6%{player}% set guild home!" to loop-value
+        
+        send "{@prefix} &aSet guild home!" to player
+
+# Function to teleport to guild home
+command /guildhome:
+    permission: raceclicker.guild.home
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if guild has home
+        if {guild::%{player::%{_uuid}%::guild}%::town} is not set:
+            send "{@prefix} &cGuild home not set!" to player
+            return
+            
+        # Teleport to guild home
+        teleport player to {guild::%{player::%{_uuid}%::guild}%::town}
+        send "{@prefix} &aTeleported to guild home!" to player
+
+# Function to view guild info
+command /guildinfo:
+    permission: raceclicker.guild.info
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has guild
+        if {player::%{_uuid}%::guild} is not set:
+            send "{@prefix} &cYou are not in a guild!" to player
+            return
+            
+        # Get guild info
+        set {_guild} to {player::%{_uuid}%::guild}
+        set {_info} to "&6Guild Info: %{_guild}%\n"
+        append "&eMaster: &a%{guild::%{_guild}%::master}%\n" to {_info}
+        append "&eMembers: &a%{size of {guild::%{_guild}%::members::*}}%/%{@guild_max_members}%\n" to {_info}
+        append "&eLevel: &a%{guild::%{_guild}%::level}%\n" to {_info}
+        append "&eXP: &a%{guild::%{_guild}%::xp}%\n" to {_info}
+        append "&eBank: &a%{guild::%{_guild}%::bank}% ClickCoins\n" to {_info}
+        append "&eTown Level: &a%{guild::%{_guild}%::town_level}%\n" to {_info}
+        append "&eMembers:\n" to {_info}
+        
+        # Add member list
+        loop {guild::%{_guild}%::members::*}:
+            set {_member} to loop-value
+            set {_member_uuid} to {_member}'s uuid
+            append "&7- %{_member}% &8(&a%{player::%{_member_uuid}%::guild_rank}%&8)\n" to {_info}
+        
+        send "{@prefix} %{_info}%" to player
+
+# Function to deposit to guild bank
+command /guilddeposit <number>:
+    permission: raceclicker.guild.bank
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has guild
+        if {player::%{_uuid}%::guild} is not set:
+            send "{@prefix} &cYou are not in a guild!" to player
+            return
+            
+        # Check if player has enough coins
+        if {player::%{_uuid}%::clickcoins} < arg-1:
+            send "{@prefix} &cYou don't have enough ClickCoins!" to player
+            return
+            
+        # Check bank limit
+        set {_guild} to {player::%{_uuid}%::guild}
+        if {guild::%{_guild}%::bank} + arg-1 > {@guild_bank_max}:
+            send "{@prefix} &cGuild bank is full!" to player
+            return
+            
+        # Deposit coins
+        add arg-1 to {guild::%{_guild}%::bank}
+        subtract arg-1 from {player::%{_uuid}%::clickcoins}
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6%{player}% deposited %{arg-1}% ClickCoins to guild bank!" to loop-value
+        
+        send "{@prefix} &aDeposited %{arg-1}% ClickCoins to guild bank!" to player
+
+# Function to withdraw from guild bank
+command /guildwithdraw <number>:
+    permission: raceclicker.guild.bank
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has guild
+        if {player::%{_uuid}%::guild} is not set:
+            send "{@prefix} &cYou are not in a guild!" to player
+            return
+            
+        # Check if bank has enough coins
+        set {_guild} to {player::%{_uuid}%::guild}
+        if {guild::%{_guild}%::bank} < arg-1:
+            send "{@prefix} &cGuild bank doesn't have enough ClickCoins!" to player
+            return
+            
+        # Withdraw coins
+        subtract arg-1 from {guild::%{_guild}%::bank}
+        add arg-1 to {player::%{_uuid}%::clickcoins}
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6%{player}% withdrew %{arg-1}% ClickCoins from guild bank!" to loop-value
+        
+        send "{@prefix} &aWithdrew %{arg-1}% ClickCoins from guild bank!" to player
+
+# Function to invite player to guild
+command /guildinvite <player>:
+    permission: raceclicker.guild.invite
+    trigger:
+        set {_uuid} to player's uuid
+        set {_target} to arg-1
+        set {_target_uuid} to {_target}'s uuid
+        
+        # Check if player has guild
+        if {player::%{_uuid}%::guild} is not set:
+            send "{@prefix} &cYou are not in a guild!" to player
+            return
+            
+        # Check if target has guild
+        if {player::%{_target_uuid}%::guild} is set:
+            send "{@prefix} &c%{_target}% is already in a guild!" to player
+            return
+            
+        # Check cooldown
+        if {player::%{_uuid}%::last_invite} is set and now - {player::%{_uuid}%::last_invite} < {@guild_invite_cooldown}:
+            send "{@prefix} &cYou must wait %{@guild_invite_cooldown}% between invites!" to player
+            return
+            
+        # Send invite
+        set {_guild} to {player::%{_uuid}%::guild}
+        send "{@prefix} &6%{player}% invited you to guild %{_guild}%!" to {_target}
+        send "{@prefix} &aSent invite to %{_target}%!" to player
+        set {player::%{_uuid}%::last_invite} to now
+        
+        # Wait for response
+        wait 30 seconds
+        if {player::%{_target_uuid}%::guild} is not set:
+            send "{@prefix} &cInvite to %{_target}% expired!" to player
+
+# Function to accept guild invite
+command /guildaccept <text>:
+    permission: raceclicker.guild.accept
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has guild
+        if {player::%{_uuid}%::guild} is set:
+            send "{@prefix} &cYou are already in a guild!" to player
+            return
+            
+        # Check if guild exists
+        if {guild::%arg-1%::master} is not set:
+            send "{@prefix} &cGuild %{arg-1}% does not exist!" to player
+            return
+            
+        # Join guild
+        set {_guild} to arg-1
+        add player to {guild::%{_guild}%::members::*}
+        add "Member" to {guild::%{_guild}%::rank::*}
+        set {player::%{_uuid}%::guild} to {_guild}
+        set {player::%{_uuid}%::guild_rank} to "Member"
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6%{player}% joined guild %{_guild}%" to loop-value
+        
+        send "{@prefix} &aJoined guild %{_guild}%!" to player
+
+# Function to set guild tag
+command /guildsettag <text>:
+    permission: raceclicker.guild.tag
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::guild_rank} is not "Guild Master":
+            send "{@prefix} &cYou don't have permission to set guild tag!" to player
+            return
+            
+        # Check tag length
+        if length of arg-1 is not between {@guild_tag_length::0} and {@guild_tag_length::1}:
+            send "{@prefix} &cGuild tag must be between %{guild_tag_length::0}% and %{guild_tag_length::1}% characters!" to player
+            return
+            
+        # Set guild tag
+        set {_guild} to {player::%{_uuid}%::guild}
+        set {guild::%{_guild}%::tag} to arg-1
+        
+        # Update guild chat
+        loop {guild::%{_guild}%::members::*}:
+            set {_member} to loop-value
+            set {_member_uuid} to {_member}'s uuid
+            set {_member}'s display name to "&8[&6%{guild::%{_guild}%::tag}%&8] %{_member}%"
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6%{player}% set guild tag to %{arg-1}%" to loop-value
+        
+        send "{@prefix} &aSet guild tag to %{arg-1}%!" to player
+
+# Function to handle guild chat
+on chat:
+    if player has guild:
+        set {_guild} to {player::%player's uuid%::guild}
+        set event-message to "&8[&6%{guild::%{_guild}%::tag}%&8] %{event-message}%"
+
+# Function to calculate guild xp
+# TODO: This is a custom event that needs to be called from other scripts
+# on race completion:
+#     set {_uuid} to player's uuid
+#     if {player::%{_uuid}%::guild} is set:
+#         set {_guild} to {player::%{_uuid}%::guild}
+#         add 100 to {guild::%{_guild}%::xp}
+#         
+#         # Check level up
+#         if {guild::%{_guild}%::xp} >= {guild::%{_guild}%::level} * 1000:
+#             add 1 to {guild::%{_guild}%::level}
+#             set {guild::%{_guild}%::xp} to 0
+#             
+#             # Give level up rewards
+            set {_reward} to {guild::%{_guild}%::level} * 1000
+            add {_reward} to {guild::%{_guild}%::bank}
+            
+            # Notify guild
+            loop {guild::%{_guild}%::members::*}:
+                send "{@prefix} &6Guild level up! New level: %{guild::%{_guild}%::level}%" to loop-value
+                send "{@prefix} &6Guild bank received %{_reward}% ClickCoins!" to loop-value
+
+# Function to handle guild bank interest
+every 24 hours:
+    loop all guilds:
+        set {_guild} to loop-value
+        set {_interest} to {guild::%{_guild}%::bank} * {@guild_bank_interest}
+        add {_interest} to {guild::%{_guild}%::bank}
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6Guild bank received %{_interest}% ClickCoins interest!" to loop-value
+
+# Function to handle guild town upkeep
+every 24 hours:
+    loop all guilds:
+        set {_guild} to loop-value
+        
+        # Check if guild has enough coins
+        if {guild::%{_guild}%::bank} < {guild::%{_guild}%::town_upkeep}:
+            send "{@prefix} &cGuild town upkeep failed! Not enough ClickCoins!" to {_guild}'s master
+            return
+            
+        # Deduct upkeep
+        subtract {guild::%{_guild}%::town_upkeep} from {guild::%{_guild}%::bank}
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6Guild town upkeep paid!" to loop-value
+
+# Function to create guild town
+command /guildtowncreate:
+    permission: raceclicker.guild.town.create
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::guild_rank} is not "Guild Master":
+            send "{@prefix} &cYou don't have permission to create a guild town!" to player
+            return
+            
+        # Check if guild has town
+        set {_guild} to {player::%{_uuid}%::guild}
+        if {guild::%{_guild}%::town} is set:
+            send "{@prefix} &cGuild already has a town!" to player
+            return
+            
+        # Check if guild has enough coins
+        if {guild::%{_guild}%::bank} < {@guild_town_cost}:
+            send "{@prefix} &cGuild needs %{@guild_town_cost}% ClickCoins to create a town!" to player
+            return
+            
+        # Create town
+        set {guild::%{_guild}%::town} to player's location
+        set {guild::%{_guild}%::town_level} to 1
+        subtract {@guild_town_cost} from {guild::%{_guild}%::bank}
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6Guild town created! Level: 1" to loop-value
+        
+        send "{@prefix} &aCreated guild town!" to player
+
+# Function to upgrade guild town
+command /guildtownupgrade:
+    permission: raceclicker.guild.town.upgrade
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::guild_rank} is not "Guild Master":
+            send "{@prefix} &cYou don't have permission to upgrade the guild town!" to player
+            return
+            
+        # Check if guild has town
+        set {_guild} to {player::%{_uuid}%::guild}
+        if {guild::%{_guild}%::town} is not set:
+            send "{@prefix} &cGuild doesn't have a town!" to player
+            return
+            
+        # Check max level
+        if {guild::%{_guild}%::town_level} >= {@guild_town_max_level}:
+            send "{@prefix} &cGuild town is at maximum level!" to player
+            return
+            
+        # Calculate upgrade cost
+        set {_cost} to {guild::%{_guild}%::town_level} * 100000
+        
+        # Check if guild has enough coins
+        if {guild::%{_guild}%::bank} < {_cost}:
+            send "{@prefix} &cGuild needs %{_cost}% ClickCoins to upgrade town!" to player
+            return
+            
+        # Upgrade town
+        add 1 to {guild::%{_guild}%::town_level}
+        subtract {_cost} from {guild::%{_guild}%::bank}
+        
+        # Notify guild
+        loop {guild::%{_guild}%::members::*}:
+            send "{@prefix} &6Guild town upgraded to level %{guild::%{_guild}%::town_level}%!" to loop-value
+        
+        send "{@prefix} &aUpgraded guild town!" to player

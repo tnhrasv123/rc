@@ -1,0 +1,379 @@
+# File: tournament_system.sk
+# Description: Tournament system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Tournament settings
+    tournament_duration: 1 hour # Duration of tournament
+    tournament_cooldown: 1 day # Cooldown between tournaments
+    tournament_entry_fee: 1000 # Entry fee in ClickCoins
+    
+    # Tournament types
+    tournament_types:
+        - "Speed Challenge"
+        - "Power Challenge"
+        - "Combo Challenge"
+        - "Track Challenge"
+        - "Race Challenge"
+        - "Prestige Challenge"
+    
+    # Prize pool distribution
+    prize_pool:
+        first: 50
+        second: 30
+        third: 15
+        fourth: 5
+    
+    # Tournament requirements
+    tournament_requirements:
+        min_players: 8
+        max_players: 32
+        min_level: 10
+        max_level: 100
+    
+    # Tournament brackets
+    tournament_brackets:
+        bronze: [1, 10]
+        silver: [11, 25]
+        gold: [26, 50]
+        platinum: [51, 75]
+        diamond: [76, 100]
+
+# Variables:
+# {tournament::current} = text (current tournament type)
+# {tournament::start_time} = timestamp (tournament start time)
+# {tournament::end_time} = timestamp (tournament end time)
+# {tournament::entry_fee} = number (tournament entry fee)
+# {tournament::prize_pool} = number (tournament prize pool)
+# {tournament::participants::*} = text (list of participants)
+# {tournament::scores::*} = number (list of scores)
+# {player::%uuid%::tournament_score} = number (player's tournament score)
+
+# Function to start tournament
+every {@tournament_cooldown}:
+    if now - {tournament::last_tournament} >= {@tournament_cooldown}:
+        startTournament()
+
+# Function to start tournament
+function startTournament():
+    # Choose random tournament type
+    set {_type} to random element of {@tournament_types::*}
+    
+    # Set tournament variables
+    set {tournament::current} to {_type}
+    set {tournament::start_time} to now
+    set {tournament::end_time} to now + {@tournament_duration}
+    set {tournament::entry_fee} to {@tournament_entry_fee}
+    set {tournament::prize_pool} to 0
+    
+    # Announce tournament
+    broadcast "{@prefix} &6Tournament Announcement: %{_type}% tournament starting!" to all players
+    broadcast "{@prefix} &6Duration: %{@tournament_duration}%" to all players
+    broadcast "{@prefix} &6Entry Fee: %{@tournament_entry_fee}% ClickCoins" to all players
+    broadcast "{@prefix} &6Prize Pool: Up to %{tournament::prize_pool}% ClickCoins!" to all players
+    
+    # Reset tournament variables
+    delete {tournament::participants::*}
+    delete {tournament::scores::*}
+    
+    # Set tournament status
+    set {tournament::status} to "open"
+
+# Function to join tournament
+command /join:
+    permission: raceclicker.tournament.join
+    trigger:
+        if {tournament::status} is "open":
+            set {_uuid} to player's uuid
+            
+            # Check requirements
+            if {player::%{_uuid}%::level} < {@tournament_requirements::min_level}:
+                send "{@prefix} &cYou need level %{tournament_requirements::min_level}% to join!" to player
+                return
+            
+            if {player::%{_uuid}%::level} > {@tournament_requirements::max_level}:
+                send "{@prefix} &cYou need level %{tournament_requirements::max_level}% or lower to join!" to player
+                return
+            
+            # Check entry fee
+            if {player::%{_uuid}%::clickcoins} < {@tournament_entry_fee}:
+                send "{@prefix} &cYou don't have enough ClickCoins!" to player
+                return
+            
+            # Check participant limit
+            if size of {tournament::participants::*} >= {@tournament_requirements::max_players}:
+                send "{@prefix} &cTournament is full!" to player
+                return
+            
+            # Join tournament
+            add player to {tournament::participants::*}
+            add {@tournament_entry_fee} to {tournament::prize_pool}
+            subtract {@tournament_entry_fee} from {player::%{_uuid}%::clickcoins}
+            set {player::%{_uuid}%::tournament_score} to 0
+            
+            # Send join message
+            send "{@prefix} &aJoined tournament! Good luck!" to player
+            broadcast "{@prefix} &6%{player}% joined the tournament!" to all players
+        else:
+            send "{@prefix} &cTournament registration is closed!" to player
+
+# Function to calculate tournament scores
+every 1 tick:
+    if {tournament::status} is "in_progress":
+        loop {tournament::participants::*}:
+            set {_p} to loop-value
+            set {_uuid} to {_p}'s uuid
+            
+            # Calculate score based on tournament type
+            switch {tournament::current}:
+                case "Speed Challenge":
+                    add {player::%{_uuid}%::speed} to {player::%{_uuid}%::tournament_score}
+                    break
+                case "Power Challenge":
+                    add {player::%{_uuid}%::power} to {player::%{_uuid}%::tournament_score}
+                    break
+                case "Combo Challenge":
+                    add {player::%{_uuid}%::combo} to {player::%{_uuid}%::tournament_score}
+                    break
+                case "Track Challenge":
+                    add {player::%{_uuid}%::tracks_completed} to {player::%{_uuid}%::tournament_score}
+                    break
+                case "Race Challenge":
+                    add {player::%{_uuid}%::races_won} to {player::%{_uuid}%::tournament_score}
+                    break
+                case "Prestige Challenge":
+                    add {player::%{_uuid}%::prestige_level} to {player::%{_uuid}%::tournament_score}
+                    break
+
+# Function to end tournament
+function endTournament():
+    if {tournament::status} is "in_progress":
+        # Calculate final scores
+        loop {tournament::participants::*}:
+            set {_p} to loop-value
+            set {_uuid} to {_p}'s uuid
+            add {_uuid} to {tournament::scores::*}
+        
+        # Sort scores
+        sort {tournament::scores::*} by {player::%{_uuid}%::tournament_score} descending
+        
+        # Calculate prizes
+        set {_prize_pool} to {tournament::prize_pool}
+        set {_first} to {_prize_pool} * {@prize_pool::first} / 100
+        set {_second} to {_prize_pool} * {@prize_pool::second} / 100
+        set {_third} to {_prize_pool} * {@prize_pool::third} / 100
+        set {_fourth} to {_prize_pool} * {@prize_pool::fourth} / 100
+        
+        # Award prizes
+        loop {tournament::scores::*}:
+            set {_uuid} to loop-value
+            set {_rank} to loop-index
+            
+            switch {_rank}:
+                case 1:
+                    add {_first} to {player::%{_uuid}%::clickcoins}
+                    broadcast "{@prefix} &61st Place: %{player::%{_uuid}%::name}% - %{_first}% ClickCoins!" to all players
+                    break
+                case 2:
+                    add {_second} to {player::%{_uuid}%::clickcoins}
+                    broadcast "{@prefix} &62nd Place: %{player::%{_uuid}%::name}% - %{_second}% ClickCoins!" to all players
+                    break
+                case 3:
+                    add {_third} to {player::%{_uuid}%::clickcoins}
+                    broadcast "{@prefix} &63rd Place: %{player::%{_uuid}%::name}% - %{_third}% ClickCoins!" to all players
+                    break
+                case 4:
+                    add {_fourth} to {player::%{_uuid}%::clickcoins}
+                    broadcast "{@prefix} &64th Place: %{player::%{_uuid}%::name}% - %{_fourth}% ClickCoins!" to all players
+                    break
+        
+        # Give tournament achievements
+        loop {tournament::scores::*}:
+            set {_uuid} to loop-value
+            set {_rank} to loop-index
+            unlockTournamentAchievement(player, {_rank})
+        
+        # Reset tournament
+        set {tournament::status} to "closed"
+        set {tournament::last_tournament} to now
+        delete {tournament::participants::*}
+        delete {tournament::scores::*}
+        delete {tournament::prize_pool}
+        
+        # Announce tournament end
+        broadcast "{@prefix} &6Tournament has ended!" to all players
+
+# Function to unlock tournament achievement
+function unlockTournamentAchievement(p: player, rank: number):
+    set {_uuid} to {_p}'s uuid
+    set {_achievement} to "Tournament Rank %{rank}%"
+    
+    # Unlock achievement
+    set {player::%{_uuid}%::achievements::%{_achievement.lower}%} to true
+    
+    # Give achievement reward
+    giveAchievementReward({_p}, {_achievement})
+    
+    # Send achievement message
+    send "{@prefix} &aUnlocked Achievement: %{_achievement}%" to {_p}
+    broadcast "{@prefix} &6%{_p}% unlocked achievement: %{_achievement}%" to players with permission "raceclicker.achievements"
+
+# Function to give achievement reward
+function giveAchievementReward(p: player, achievement: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Base reward
+    set {_reward} to 100
+    
+    # Special rewards
+    switch achievement:
+        case "Tournament Rank 1":
+            set {_reward} to 500
+            break
+        case "Tournament Rank 2":
+            set {_reward} to 300
+            break
+        case "Tournament Rank 3":
+            set {_reward} to 200
+            break
+    
+    # Add reward
+    add {_reward} to {player::%{_uuid}%::clickcoins}
+    send "{@prefix} &aEarned %{@achievement_bonus}% ClickCoins for achievement!" to {_p}
+
+# Function to get tournament status
+function getTournamentStatus() :: text:
+    if {tournament::status} is not set:
+        return "&cNo tournament active!"
+    
+    set {_status} to "&6Tournament: %{tournament::current}%\n"
+    append "&eStatus: &a%{tournament::status}%\n" to {_status}
+    append "&eParticipants: &a%{size of {tournament::participants::*}}%\n" to {_status}
+    append "&ePrize Pool: &a%{tournament::prize_pool}% ClickCoins\n" to {_status}
+    
+    # Add participant list
+    if size of {tournament::participants::*} > 0:
+        append "&eParticipants:\n" to {_status}
+        loop {tournament::participants::*}:
+            set {_p} to loop-value
+            set {_uuid} to {_p}'s uuid
+            append "&7- %{_p}%: &a%{player::%{_uuid}%::tournament_score}%\n" to {_status}
+    
+    return {_status}
+
+# Command to view tournament status
+command /tournament:
+    permission: raceclicker.tournament.view
+    trigger:
+        send "{@prefix} %{getTournamentStatus()}%" to player
+
+# Command to view tournament leaderboard
+command /tournamentleaderboard:
+    permission: raceclicker.tournament.view
+    trigger:
+        if {tournament::status} is "in_progress":
+            set {_leaderboard} to []
+            
+            # Get top players
+            loop {tournament::participants::*} sorted by {player::%{_uuid}%::tournament_score} descending:
+                if size of {_leaderboard} >= 10:
+                    break
+                set {_p} to loop-value
+                set {_uuid} to {_p}'s uuid
+                add "&e%{_p}%: &a%{player::%{_uuid}%::tournament_score}%" to {_leaderboard}
+            
+            # Send leaderboard
+            send "{@prefix} &6Tournament Leaderboard:" to player
+            loop {_leaderboard}:
+                send "&7- %{loop-value}%" to player
+        else:
+            send "{@prefix} &cNo tournament in progress!" to player
+
+# Tournament brackets
+command /tournamentbracket:
+    permission: raceclicker.tournament.view
+    trigger:
+        set {_uuid} to player's uuid
+        set {_level} to {player::%{_uuid}%::level}
+        
+        # Determine bracket
+        if {_level} is between {@tournament_brackets::bronze::0} and {@tournament_brackets::bronze::1}:
+            send "{@prefix} &6Your Tournament Bracket: &aBronze" to player
+        else if {_level} is between {@tournament_brackets::silver::0} and {@tournament_brackets::silver::1}:
+            send "{@prefix} &6Your Tournament Bracket: &aSilver" to player
+        else if {_level} is between {@tournament_brackets::gold::0} and {@tournament_brackets::gold::1}:
+            send "{@prefix} &6Your Tournament Bracket: &aGold" to player
+        else if {_level} is between {@tournament_brackets::platinum::0} and {@tournament_brackets::platinum::1}:
+            send "{@prefix} &6Your Tournament Bracket: &aPlatinum" to player
+        else if {_level} is between {@tournament_brackets::diamond::0} and {@tournament_brackets::diamond::1}:
+            send "{@prefix} &6Your Tournament Bracket: &aDiamond" to player
+        else:
+            send "{@prefix} &cInvalid level for tournaments!" to player
+
+# Tournament rewards GUI
+command /tournamentrewards:
+    permission: raceclicker.tournament.view
+    trigger:
+        # Create GUI
+        open chest with 6 rows named "&6Tournament Rewards" to player
+        
+        # Add reward items
+        set {_slot} to 0
+        loop all ranks:
+            set {_rank} to loop-value
+            
+            # Calculate reward
+            set {_reward} to {tournament::prize_pool} * {@prize_pool::%{_rank}%} / 100
+            
+            # Create item
+            set {_item} to diamond
+            if {_rank} is "first":
+                set {_item} to diamond_block
+            else if {_rank} is "second":
+                set {_item} to netherite_ingot
+            else if {_rank} is "third":
+                set {_item} to gold_ingot
+            else if {_rank} is "fourth":
+                set {_item} to iron_ingot
+            
+            # Add item to GUI
+            set slot {_slot} of player's current inventory to {_item} named "&6%{_rank}% Place" with lore "&eReward: &a%{_reward}% ClickCoins"
+            
+            add 1 to {_slot}
+        
+        # Add close button
+        set slot 53 of player's current inventory to red_stained_glass_pane named "&cClose" with lore "&eClick to close"
+
+# Tournament effects
+every 1 tick:
+    if {tournament::status} is "in_progress":
+        loop {tournament::participants::*}:
+            set {_p} to loop-value
+            set {_uuid} to {_p}'s uuid
+            
+            # Apply tournament effects
+            switch {tournament::current}:
+                case "Speed Challenge":
+                    set {_speed} to {player::%{_uuid}%::speed} * 1.2
+                    set {player::%{_uuid}%::speed} to {_speed}
+                    break
+                case "Power Challenge":
+                    set {_power} to {player::%{_uuid}%::power} * 1.2
+                    set {player::%{_uuid}%::power} to {_power}
+                    break
+                case "Combo Challenge":
+                    set {_combo} to {player::%{_uuid}%::combo} * 1.2
+                    set {player::%{_uuid}%::combo} to {_combo}
+                    break
+                case "Track Challenge":
+                    set {_tracks} to {player::%{_uuid}%::tracks_completed} * 1.2
+                    set {player::%{_uuid}%::tracks_completed} to {_tracks}
+                    break
+                case "Race Challenge":
+                    set {_races} to {player::%{_uuid}%::races_won} * 1.2
+                    set {player::%{_uuid}%::races_won} to {_races}
+                    break
+                case "Prestige Challenge":
+                    set {_prestige} to {player::%{_uuid}%::prestige_level} * 1.2
+                    set {player::%{_uuid}%::prestige_level} to {_prestige}
+                    break

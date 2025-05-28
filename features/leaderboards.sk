@@ -1,0 +1,140 @@
+# File: leaderboards.sk
+# Path: race-clicker/features/leaderboards.sk
+# Description: Manages and displays leaderboards for various stats.
+
+options:
+    prefix: "&6&lRaceClicker &8» &bLeaderboards &8»"
+    max_leaderboard_entries: 10 # How many top entries to show
+
+# Leaderboard Data Structure (Example - adjust as needed):
+# {leaderboards::track::%track_id%::top_times::%player_uuid%::time} - stores best time (as timespan or number of ticks)
+# {leaderboards::track::%track_id%::top_times::%player_uuid%::name} - stores player name for display
+# {leaderboards::global::clicks::%player_uuid%::amount} - stores total clicks
+# {leaderboards::global::clicks::%player_uuid%::name} - stores player name
+# {leaderboards::global::races_won::%player_uuid%::amount}
+# {leaderboards::global::races_won::%player_uuid%::name}
+# {leaderboards::global::prestige_level::%player_uuid%::amount}
+# {leaderboards::global::prestige_level::%player_uuid%::name}
+
+# --- Leaderboard Update Functions --- #
+
+# Called when a player finishes a race with a new personal best on a track
+function updateTrackLeaderboard(p: player, track_id: text, time_taken: timespan):
+    set {_uuid} to {_p}'s uuid
+    set {_time_ticks} to ticks from {_time_taken} # Store as ticks for easier comparison
+
+    # Check if current time is better than existing, or if player is not on leaderboard yet
+    if {leaderboards::track::%{_track_id}%::top_times::%{_uuid}%::time} is not set or {_time_ticks} < {leaderboards::track::%{_track_id}%::top_times::%{_uuid}%::time}:
+        set {leaderboards::track::%{_track_id}%::top_times::%{_uuid}%::time} to {_time_ticks}
+        set {leaderboards::track::%{_track_id}%::top_times::%{_uuid}%::name} to name of {_p}
+        # Potentially prune leaderboard if it exceeds max_leaderboard_entries after adding
+        # This requires sorting all entries and removing the worst ones, which can be complex with Skript's list vars.
+        # A simpler approach is to just store all and display top N.
+        send "{@prefix} &aNew personal best on %{tracks::%{_track_id}%::name}! Your time has been recorded." to {_p}
+    # TODO: Add logic to sort and prune the leaderboard to keep only top N entries if desired.
+
+# Called when a player's global stat (like total clicks) changes significantly
+function updateGlobalLeaderboard(stat_type: text, p: player, value: number):
+    set {_uuid} to {_p}'s uuid
+    # Example for 'clicks'
+    if {_stat_type} is "clicks":
+        # Only update if new value is higher (or if not set)
+        if {leaderboards::global::clicks::%{_uuid}%::amount} is not set or {_value} > {leaderboards::global::clicks::%{_uuid}%::amount}:
+            set {leaderboards::global::clicks::%{_uuid}%::amount} to {_value}
+            set {leaderboards::global::clicks::%{_uuid}%::name} to name of {_p}
+    else if {_stat_type} is "races_won":
+        if {leaderboards::global::races_won::%{_uuid}%::amount} is not set or {_value} > {leaderboards::global::races_won::%{_uuid}%::amount}:
+            set {leaderboards::global::races_won::%{_uuid}%::amount} to {_value}
+            set {leaderboards::global::races_won::%{_uuid}%::name} to name of {_p}
+    else if {_stat_type} is "prestige_level":
+        if {leaderboards::global::prestige_level::%{_uuid}%::amount} is not set or {_value} > {leaderboards::global::prestige_level::%{_uuid}%::amount}:
+            set {leaderboards::global::prestige_level::%{_uuid}%::amount} to {_value}
+            set {leaderboards::global::prestige_level::%{_uuid}%::name} to name of {_p}
+    # Add more stat types as needed
+    # TODO: Pruning logic similar to track leaderboards if storing all entries becomes an issue.
+
+# --- Leaderboard Display Command --- #
+
+command /leaderboard [<text>] [<text>]:
+    aliases: /lb, /top
+    trigger:
+        if arg-1 is not set or arg-1 is "help":
+            send "{@prefix} &eAvailable Leaderboards:"
+            send "&7- &b/lb global <clicks|races_won|prestige>"
+            send "&7- &b/lb track <track_id>"
+            send "&7- &b/lb tracks &7(Lists available track leaderboards)"
+            stop
+
+        if arg-1 is "tracks":
+            send "{@prefix} &eTrack Leaderboards Available For:"
+            if size of {tracks::*} is 0:
+                send "&c - No tracks defined yet."
+                stop
+            loop {tracks::*}:
+                send "&7- &a%loop-value::name% &7(ID: &b%loop-index%&7)"
+            stop
+
+        if arg-1 is "global":
+            if arg-2 is not set or arg-2 is not in ("clicks", "races_won", "prestige_level", "prestige"):
+                send "{@prefix} &cUsage: /lb global <clicks|races_won|prestige_level>"
+                stop
+            set {_stat_to_display} to arg-2
+            if {_stat_to_display} is "prestige": # alias
+                set {_stat_to_display} to "prestige_level"
+            
+            send "{@prefix} &6&lGlobal Top %capitalize({_stat_to_display})%" 
+            clear {_temp_lb_entries::*}
+            loop {leaderboards::global::%{_stat_to_display}%::*}:
+                add "%{leaderboards::global::%{_stat_to_display}%::%loop-index%::name}%:%{leaderboards::global::%{_stat_to_display}%::%loop-index%::amount}%" to {_temp_lb_entries::*}
+            
+            if size of {_temp_lb_entries::*} is 0:
+                send "&c - No data available for this leaderboard yet."
+                stop
+
+            sort {_temp_lb_entries::*} by number split at ":" part 2 descending
+
+            loop (min(size of {_temp_lb_entries::*}, {@max_leaderboard_entries})) times:
+                set {_entry} to {_temp_lb_entries::%loop-number%}
+                set {_name} to text split {_entry} at ":" part 1
+                set {_score} to number split {_entry} at ":" part 2
+                if {_stat_to_display} is "clicks" or {_stat_to_display} is "races_won" or {_stat_to_display} is "prestige_level":
+                    send "&e#%loop-number% &7- &b%{_name}% &7- &a%{_score}%, %{_stat_to_display}%"
+                else:
+                    send "&e#%loop-number% &7- &b%{_name}% &7- &a%{_score}%"
+            stop
+
+        if arg-1 is "track":
+            if arg-2 is not set or {tracks::%arg-2%::name} is not set:
+                send "{@prefix} &cUsage: /lb track <track_id>. Track ID '%arg-2%' not found."
+                send "{@prefix} &7Use /lb tracks to see available track IDs."
+                stop
+            set {_track_id_display} to arg-2
+            send "{@prefix} &6&lTop Times for %{tracks::%{_track_id_display}%::name}%"
+            clear {_temp_lb_entries::*}
+            loop {leaderboards::track::%{_track_id_display}%::top_times::*}:
+                add "%{leaderboards::track::%{_track_id_display}%::top_times::%loop-index%::name}%:%{leaderboards::track::%{_track_id_display}%::top_times::%loop-index%::time}%" to {_temp_lb_entries::*}
+
+            if size of {_temp_lb_entries::*} is 0:
+                send "&c - No times recorded for this track yet."
+                stop
+
+            sort {_temp_lb_entries::*} by number split at ":" part 2 ascending # Times: lower is better
+
+            loop (min(size of {_temp_lb_entries::*}, {@max_leaderboard_entries})) times:
+                set {_entry} to {_temp_lb_entries::%loop-number%}
+                set {_name} to text split {_entry} at ":" part 1
+                set {_time_ticks_lb} to number split {_entry} at ":" part 2
+                set {_formatted_time} to formatTimespan({_time_ticks_lb} ticks) # Requires formatTimespan from utils
+                send "&e#%loop-number% &7- &b%{_name}% &7- &a%{_formatted_time}%"
+            stop
+
+# --- Utility Functions (if needed) --- #
+# Example: Function to prune leaderboards (more complex)
+# function pruneLeaderboard(type: text, id: text optional, stat: text optional):
+# This would involve getting all entries, sorting, and deleting extras.
+# For Skript, it's often easier to just sort on display and limit display count.
+
+on load:
+    # Ensure utils/formatters.sk is loaded if not already handled by a core script
+    # require script "utils/formatters.sk" # Assuming it's loaded elsewhere
+    send console "[RaceClicker - Leaderboards] Loaded."

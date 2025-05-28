@@ -1,0 +1,157 @@
+# File: spectator_mode.sk
+# Description: Spectator mode camera system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    spectator_modes: "follow,free,track" # Available spectator modes
+    spectator_follow_distance: 4 blocks # Distance to follow players
+    spectator_follow_height: 2 blocks # Height above ground
+    spectator_free_speed: 0.8 # Speed multiplier for free movement
+    spectator_track_smoothness: 0.5 # Smoothing factor for track camera
+    
+# Variables:
+# {spectator::%uuid%::mode} = text (current spectator mode)
+# {spectator::%uuid%::target_player} = text (target player UUID)
+# {spectator::%uuid%::free_location} = location (for free mode)
+# {spectator::%uuid%::track_position} = number (current track position)
+
+# Function to enable spectator mode
+function enableSpectatorMode(p: player):
+    set {_uuid} to {_p}'s uuid
+    set {spectator::%{_uuid}%::mode} to "follow"
+    set {spectator::%{_uuid}%::target_player} to null
+    set {spectator::%{_uuid}%::free_location} to location of {_p}
+    set {spectator::%{_uuid}%::track_position} to 0
+    
+    # Send message
+    send "{@prefix} &aSpectator Mode Enabled!" to {_p}
+    
+    # Hide player's body
+    hide {_p} from {_p}
+    
+    # Set initial camera position
+    updateSpectatorCamera({_p})
+
+# Function to disable spectator mode
+function disableSpectatorMode(p: player):
+    set {_uuid} to {_p}'s uuid
+    delete {spectator::%{_uuid}%::*}
+    
+    # Show player's body
+    show {_p} to {_p}
+    
+    # Reset camera
+    set camera location of {_p} to location of {_p}
+    set camera rotation of {_p} to look at location of {_p} add vector(0, 1, 0)
+    
+    # Send message
+    send "{@prefix} &cSpectator Mode Disabled!" to {_p}
+
+# Function to update spectator camera position
+every 1 tick:
+    loop all players:
+        if {spectator::%loop-player's uuid%::mode} is set:
+            set {_p} to loop-player
+            set {_uuid} to {_p}'s uuid
+            set {_mode} to {spectator::%{_uuid}%::mode}
+            
+            if {_mode} is "follow":
+                # Follow mode
+                if {spectator::%{_uuid}%::target_player} is set:
+                    set {_target} to player from uuid {spectator::%{_uuid}%::target_player}
+                    if {_target} is not null:
+                        set {_target_loc} to location of {_target}
+                        set {_camera_loc} to {_target_loc} add vector(0, {@spectator_follow_height}, -{@spectator_follow_distance})
+                        set camera location of {_p} to {_camera_loc}
+                        set camera rotation of {_p} to look at {_target_loc}
+            else if {_mode} is "free":
+                # Free movement mode
+                set {_loc} to {spectator::%{_uuid}%::free_location} ? location of {_p}
+                
+                # Get movement input
+                set {_forward} to 0
+                set {_right} to 0
+                
+                if {_p} is holding "forward":
+                    add 1 to {_forward}
+                if {_p} is holding "back":
+                    subtract 1 from {_forward}
+                if {_p} is holding "left":
+                    subtract 1 from {_right}
+                if {_p} is holding "right":
+                    add 1 to {_right}
+                
+                # Calculate movement vector
+                set {_move_vec} to vector({_right}, 0, {_forward})
+                
+                # Move camera
+                set {_new_loc} to {_loc} add {_move_vec} multiply {@spectator_free_speed}
+                set {spectator::%{_uuid}%::free_location} to {_new_loc}
+                set camera location of {_p} to {_new_loc}
+            else if {_mode} is "track":
+                # Track camera mode
+                if {spectator::%{_uuid}%::target_player} is set:
+                    set {_target} to player from uuid {spectator::%{_uuid}%::target_player}
+                    if {_target} is not null:
+                        # Get target's race citizen
+                        set {_citizen_id} to {player::%{_target}'s uuid%::race_citizen_entity_id}
+                        if {_citizen_id} is set:
+                            set {_citizen} to entity from uuid {_citizen_id}
+                            set {_citizen_loc} to location of {_citizen}
+                            
+                            # Calculate smooth track position
+                            set {_current_pos} to {spectator::%{_uuid}%::track_position}
+                            set {_target_pos} to getTrackPosition({_citizen_loc})
+                            set {_smooth_pos} to {_current_pos} + ({_target_pos} - {_current_pos}) * {@spectator_track_smoothness}
+                            set {spectator::%{_uuid}%::track_position} to {_smooth_pos}
+                            
+                            # Calculate camera position based on track position
+                            set {_camera_loc} to calculateTrackCameraPosition({_smooth_pos})
+                            set camera location of {_p} to {_camera_loc}
+                            set camera rotation of {_p} to look at {_citizen_loc}
+
+# Function to get track position from location
+function getTrackPosition(loc: location) :: number:
+    # TODO: Implement track position calculation based on track waypoints
+    return 0
+
+# Function to calculate camera position based on track position
+function calculateTrackCameraPosition(track_position: number) :: location:
+    # TODO: Implement camera position calculation based on track waypoints
+    return location of player
+
+# Command to toggle spectator mode
+command /spectator:
+    trigger:
+        if {spectator::%player's uuid%::mode} is set:
+            disableSpectatorMode(player)
+        else:
+            enableSpectatorMode(player)
+
+# Command to change spectator mode
+command /spectatormode <text>:
+    trigger:
+        if {spectator::%player's uuid%::mode} is not set:
+            send "{@prefix} &cYou're not in spectator mode!" to player
+            return
+        
+        if arg-1 is in {@spectator_modes}:
+            set {spectator::%player's uuid%::mode} to arg-1
+            send "{@prefix} &aSpectator Mode: &e%arg-1%" to player
+        else:
+            send "{@prefix} &cInvalid spectator mode! Available modes: %{@spectator_modes}%" to player
+
+# Command to target a player
+command /spectatortarget <player>:
+    trigger:
+        if {spectator::%player's uuid%::mode} is not set:
+            send "{@prefix} &cYou're not in spectator mode!" to player
+            return
+        
+        set {spectator::%player's uuid%::target_player} to arg-1's uuid
+        send "{@prefix} &aTargeting player: &e%arg-1%" to player
+
+# Function to get current spectator mode
+function getCurrentSpectatorMode(p: player) :: text:
+    set {_uuid} to {_p}'s uuid
+    return {spectator::%{_uuid}%::mode} ? "follow"

@@ -1,0 +1,112 @@
+# File: race_clicker.sk
+# Path: race-clicker/race_clicker.sk
+# Description: Main Skript file for Race Clicker. Loads modules and handles global events.
+
+options:
+    prefix: &6&lRaceClicker &8»
+    version: "0.1.0-alpha" # Corresponds to initial development phase
+    debug_mode: true # Toggle for extensive debug messages across all modules
+
+# --- Script Loading and Initialization ---
+on load:
+    send console "&a[RaceClicker] Loading Race Clicker Skript v%{_version}%..."
+
+    # Announce loading of different modules. Actual Skript loading order is managed by Skript itself (alphabetical or via /skript load).
+    # This is more for logical organization and confirmation.
+    send console "&a[RaceClicker] &7- Core systems (data, clicking, racing)..."
+    send console "&a[RaceClicker] &7- GUI systems (shop, stats, leaderboards)..."
+    send console "&a[RaceClicker] &7- Feature systems (achievements, prestige, tournaments)..."
+    send console "&a[RaceClicker] &7- Integration systems (camera, citizens)..."
+    send console "&a[RaceClicker] &7- Admin tools..."
+
+    # TODO: Perform any initial setup required globally, e.g.,
+    # - Initialize global variables if not handled by specific modules.
+    # - Check for dependencies (e.g., Citizens2, Vault - though Skript usually handles this with addons).
+    # Example: if plugin "Citizens" is not enabled: send console "&c[RaceClicker] Citizens plugin not found! Some features may not work."
+
+    send console "&a[RaceClicker] Skript loaded successfully. Debug mode is %{_debug_mode} ? "&aenabled" : "&cdisabled"%&a."
+    if {@debug_mode} is true:
+        send console "&e[RaceClicker] Debug messages will be shown for troubleshooting."
+
+# --- Global Helper Functions (accessible by other scripts if needed) ---
+
+# Function to send a debug message if debug_mode is enabled
+function sendDebugMessage(message: text, ?source_script: text):
+    if {@debug_mode} is true:
+        if {_source_script} is set:
+            send console "&e[RC Debug - %{_source_script}%] %{_message}%"
+        else:
+            send console "&e[RC Debug] %{_message}%"
+
+# --- Global Event Handlers (if any that don't fit specific modules) ---
+
+# Example: Player Join - Handled in data.sk for data initialization, but could have global aspects here.
+on join:
+    # sendDebugMessage("Player %player% joined the server.", "race_clicker.sk")
+    # Initial data setup is in data.sk
+    # Potentially check for version updates or send a welcome message here if not done elsewhere.
+    wait 1 tick # Ensure other scripts (like data.sk) have processed the join event.
+    send "{@prefix} &7Welcome to Race Clicker! Type &e/rc help &7for commands." to player
+
+on quit:
+    # sendDebugMessage("Player %player% left the server.", "race_clicker.sk")
+    # Data saving should be handled in data.sk or via its functions.
+    pass
+
+# --- Main Command for Race Clicker ---
+command /raceclicker [<text>] [<text>]:
+    aliases: rc, rclicker
+    trigger:
+        if arg-1 is not set or arg-1 is "help":
+            send "{@prefix} &7Available Commands:"
+            send "&e/click &7- Perform a click (main interaction)."
+            send "&e/rc shop &7- Open the upgrade shop."
+            send "&e/rc stats &7- View your statistics."
+            send "&e/rc leaderboard <type> &7- View leaderboards (e.g., clicks, wins)."
+            send "&e/rc achievements &7- View your achievements."
+            send "&e/rc prestige &7- Access the prestige system."
+            send "&e/rc race &7- Manage race participation (join, leave, view)."
+            send "&e/rc tournament &7- Manage tournament participation."
+            send "&e/rcadmin &7- Access admin commands (requires permission)."
+            send "&e/rc version &7- Shows the current Skript version."
+            stop
+
+        if arg-1 is "version":
+            send "{@prefix} &7You are running Race Clicker Skript &ev%{_version}%&7."
+            if {@debug_mode} is true:
+                send "{@prefix} &eDebug mode is currently active."
+            stop
+
+        # Forward commands to respective scripts or handle simple ones here
+        # This acts as a central command hub, though individual scripts also register their own commands.
+        if arg-1 is "shop":
+            execute player command "rcshop"
+        else if arg-1 is "stats":
+            execute player command "rcstats"
+        else if arg-1 is "achievements":
+            execute player command "rcachievements"
+        else if arg-1 is "prestige":
+            execute player command "rcprestige"
+        # Add more forwarding if other main commands are structured under /rc <subcommand>
+        # Example for leaderboards, assuming leaderboards.sk handles /rcleaderboard <type>
+        # else if arg-1 is "leaderboard":
+        #    if arg-2 is set:
+        #        execute player command "rcleaderboard %arg-2%"
+        #    else:
+        #        send "{@prefix} &cUsage: /rc leaderboard <type> (e.g., clicks, wins)"
+        else:
+            send "{@prefix} &cUnknown command. Type &e/rc help &cfor a list of commands."
+
+# --- Phase 10: Testing and Balancing ---
+# - TODO: Add commands or mechanisms for stress testing (e.g., simulating many players clicking).
+# - TODO: Add commands for admins to easily grant/test specific game states or items.
+
+# End of race_clicker.sk
+# This file primarily sets up global options and can act as a manifest.
+# Most game logic resides in the respective module files within subdirectories.
+
+# Reminder: Skript loads scripts based on their file names or specified load order.
+# Ensure sub-scripts in core/, gui/, features/, etc., are loaded correctly.
+# Typically, Skript loads files alphabetically within a folder, and then folders alphabetically.
+# If specific load order is critical (e.g., data.sk before others), naming conventions (01_data.sk) or
+# Skript's own load commands might be necessary for complex setups, but usually not for this structure.

@@ -1,0 +1,230 @@
+# File: economy_system.sk
+# Description: Economy system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Currency settings
+    currency_name: "ClickCoin"
+    currency_symbol: "§" # ClickCoin symbol
+    
+    # Earning rates
+    base_click_earnings: 1.0 # Base earnings per click
+    race_win_bonus: 500 # Bonus for winning race
+    track_completion_bonus: 250 # Bonus for completing track
+    achievement_bonus: 100 # Bonus for achievements
+    prestige_bonus: 1000 # Bonus for prestige
+    
+    # Shop settings
+    shop_refresh_time: 5 minutes # How often shop refreshes
+    max_items_per_page: 9 # Items per shop page
+    
+    # Upgrade costs
+    speed_upgrade_cost: 1000 # Cost of speed upgrade
+    power_upgrade_cost: 1500 # Cost of power upgrade
+    combo_upgrade_cost: 800 # Cost of combo upgrade
+    accuracy_upgrade_cost: 1200 # Cost of accuracy upgrade
+
+# Variables:
+# {player::%uuid%::clickcoins} = number (player's ClickCoins)
+# {player::%uuid%::last_shop_refresh} = timestamp (last shop refresh)
+# {shop::items::*} = text (list of shop items)
+# {shop::prices::*} = number (list of item prices)
+
+# Function to initialize economy
+on join:
+    set {_p} to player
+    set {_uuid} to {_p}'s uuid
+    
+    # Initialize ClickCoins
+    if not {player::%{_uuid}%::clickcoins} is set:
+        set {player::%{_uuid}%::clickcoins} to 0
+    
+    # Initialize shop
+    if not {shop::items::*} is set:
+        initializeShop()
+
+# Function to initialize shop
+function initializeShop():
+    # Clear existing shop
+    clear {shop::items::*}
+    clear {shop::prices::*}
+    
+    # Add basic upgrades
+    add "Speed Upgrade" to {shop::items::*}
+    add {@speed_upgrade_cost} to {shop::prices::*}
+    
+    add "Power Upgrade" to {shop::items::*}
+    add {@power_upgrade_cost} to {shop::prices::*}
+    
+    add "Combo Upgrade" to {shop::items::*}
+    add {@combo_upgrade_cost} to {shop::prices::*}
+    
+    add "Accuracy Upgrade" to {shop::items::*}
+    add {@accuracy_upgrade_cost} to {shop::prices::*}
+    
+    # Add consumables
+    add "Speed Boost" to {shop::items::*}
+    add 500 to {shop::prices::*}
+    
+    add "Power Potion" to {shop::items::*}
+    add 750 to {shop::prices::*}
+    
+    add "Combo Multiplier" to {shop::items::*}
+    add 600 to {shop::prices::*}
+    
+    # Add prestige items
+    add "Prestige Token" to {shop::items::*}
+    add 10000 to {shop::prices::*}
+
+# Function to earn ClickCoins
+every 1 tick:
+    loop all players:
+        set {_p} to loop-player
+        set {_uuid} to {_p}'s uuid
+        
+        # Check for clicks
+        if {player::%{_uuid}%::clicks} is set:
+            set {_clicks} to {player::%{_uuid}%::clicks}
+            
+            # Calculate earnings
+            set {_earnings} to {_clicks} * {@base_click_earnings}
+            
+            # Apply prestige bonus
+            if {player::%{_uuid}%::prestige_level} is set:
+                set {_prestige_bonus} to {player::%{_uuid}%::prestige_level} * {@prestige_bonus}
+                add {_prestige_bonus} to {_earnings}
+            
+            # Add to ClickCoins
+            add {_earnings} to {player::%{_uuid}%::clickcoins}
+            
+            # Reset clicks
+            set {player::%{_uuid}%::clicks} to 0
+
+# Function to handle race rewards
+every race ends:
+    loop all players:
+        set {_p} to loop-player
+        set {_uuid} to {_p}'s uuid
+        
+        # Check if player won
+        if {player::%{_uuid}%::race_position} is 1:
+            add {@race_win_bonus} to {player::%{_uuid}%::clickcoins}
+            send "{@prefix} &aYou won %{@race_win_bonus}% %{currency_name}% for winning the race!" to {_p}
+        
+        # Check if track completed
+        if {player::%{_uuid}%::track_completed} is true:
+            add {@track_completion_bonus} to {player::%{_uuid}%::clickcoins}
+            send "{@prefix} &aYou earned %{@track_completion_bonus}% %{currency_name}% for completing the track!" to {_p}
+
+# Function to handle achievement rewards
+on achievement unlocked:
+    set {_p} to player
+    set {_uuid} to {_p}'s uuid
+    add {@achievement_bonus} to {player::%{_uuid}%::clickcoins}
+    send "{@prefix} &aYou earned %{@achievement_bonus}% %{currency_name}% for unlocking an achievement!" to {_p}
+
+# Shop commands
+command /shop:
+    trigger:
+        open shop gui to player
+
+command /buy <text>:
+    permission: raceclicker.shop.buy
+    trigger:
+        set {_item} to arg-1
+        set {_p} to player
+        set {_uuid} to {_p}'s uuid
+        
+        # Find item in shop
+        set {_index} to 0
+        loop {shop::items::*}:
+            if loop-value is {_item}:
+                break
+            add 1 to {_index}
+        
+        # Check if item exists
+        if {_index} >= size of {shop::items::*}:
+            send "{@prefix} &cItem not found in shop!" to {_p}
+            return
+        
+        # Get price
+        set {_price} to {shop::prices::%{_index}%}
+        
+        # Check if player can afford
+        if {player::%{_uuid}%::clickcoins} < {_price}:
+            send "{@prefix} &cYou don't have enough %{currency_name}%!" to {_p}
+            return
+            
+        # Deduct price
+        subtract {_price} from {player::%{_uuid}%::clickcoins}
+        
+        # Apply purchase
+        applyPurchase({_p}, {_item})
+        
+        # Send confirmation
+        send "{@prefix} &aPurchased %{_item}% for %{_price}% %{currency_name}%!" to {_p}
+
+# Function to apply purchase
+function applyPurchase(p: player, item: text):
+    set {_uuid} to {_p}'s uuid
+    
+    switch {_item}:
+        case "Speed Upgrade":
+            add 1 to {player::%{_uuid}%::speed_level}
+            set {player::%{_uuid}%::speed_multiplier} to 1.2 ^ {player::%{_uuid}%::speed_level}
+            break
+        
+        case "Power Upgrade":
+            add 1 to {player::%{_uuid}%::power_level}
+            set {player::%{_uuid}%::power_multiplier} to 1.3 ^ {player::%{_uuid}%::power_level}
+            break
+        
+        case "Combo Upgrade":
+            add 1 to {player::%{_uuid}%::combo_level}
+            set {player::%{_uuid}%::combo_multiplier} to 1.1 ^ {player::%{_uuid}%::combo_level}
+            break
+        
+        case "Accuracy Upgrade":
+            add 1 to {player::%{_uuid}%::accuracy_level}
+            set {player::%{_uuid}%::accuracy_multiplier} to 1.15 ^ {player::%{_uuid}%::accuracy_level}
+            break
+        
+        case "Speed Boost":
+            set {player::%{_uuid}%::speed_boost} to true
+            start speedBoostEffect({_p})
+            break
+        
+        case "Power Potion":
+            set {player::%{_uuid}%::power_boost} to true
+            start powerBoostEffect({_p})
+            break
+        
+        case "Combo Multiplier":
+            set {player::%{_uuid}%::combo_boost} to true
+            start comboBoostEffect({_p})
+            break
+        
+        case "Prestige Token":
+            add 1 to {player::%{_uuid}%::prestige_tokens}
+            break
+
+# Function to get player's ClickCoins
+function getClickCoins(p: player) :: number:
+    set {_uuid} to {_p}'s uuid
+    return {player::%{_uuid}%::clickcoins} ? 0
+
+# Function to format ClickCoins
+function formatClickCoins(amount: number) :: text:
+    set {_amount} to {_amount} rounded to 2 decimal places
+    return "%{_amount}% %{currency_symbol}%"
+
+# Function to refresh shop
+every {@shop_refresh_time}:
+    initializeShop()
+    broadcast "{@prefix} &aShop has been refreshed!" to players with permission "raceclicker.shop"
+
+# Command to check balance
+command /balance:
+    trigger:
+        set {_coins} to getClickCoins(player)
+        send "{@prefix} &6Your Balance: %{formatClickCoins(_coins)}%" to player

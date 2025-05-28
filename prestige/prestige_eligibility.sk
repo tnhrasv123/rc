@@ -1,0 +1,245 @@
+# File: prestige_eligibility.sk
+# Description: Prestige eligibility system with detailed requirements
+
+options:
+    prefix: &6&lRaceClicker &8»
+
+options:
+    # Click requirements
+    prestige_requirements::clicks_base: 1000000 # Base clicks needed
+    prestige_requirements::clicks_per_prestige: 1000000 # Additional clicks needed per prestige level
+    
+    # Race requirements
+    prestige_requirements::races_won_base: 100 # Base races won needed
+    prestige_requirements::races_won_per_prestige: 50 # Additional races won needed per prestige level
+    
+    # Track completion requirements
+    prestige_requirements::tracks_completed_base: 50 # Base tracks completed needed
+    prestige_requirements::tracks_completed_per_prestige: 25 # Additional tracks needed per prestige level
+    
+    # Achievement requirements
+    prestige_requirements::achievements_base: 50 # Base achievements needed
+    prestige_requirements::achievements_per_prestige: 25 # Additional achievements needed per prestige level
+    
+    # Combo requirements
+    prestige_requirements::max_combo_base: 100 # Base max combo needed
+    prestige_requirements::max_combo_per_prestige: 50 # Additional combo needed per prestige level
+    
+    # Time requirements
+    prestige_requirements::total_time_base: 36000 # Base time needed (in seconds - 10 hours)
+    prestige_requirements::total_time_per_prestige: 18000 # Additional time needed per prestige level (in seconds - 5 hours)
+    
+    # Multiplayer requirements
+    prestige_requirements::multiplayer_wins_base: 50 # Base multiplayer wins needed
+    prestige_requirements::multiplayer_wins_per_prestige: 25 # Additional multiplayer wins needed per prestige level
+
+options:
+    # Power bonus per prestige
+    prestige_rewards::power_bonus: 2.0 # Multiplier for click power
+    
+    # Speed bonus per prestige
+    prestige_rewards::speed_bonus: 1.5 # Multiplier for speed
+    
+    # Combo bonus per prestige
+    prestige_rewards::combo_bonus: 1.2 # Multiplier for combo
+    
+    # Accuracy bonus per prestige
+    prestige_rewards::accuracy_bonus: 1.1 # Multiplier for accuracy
+    
+    # Points bonus per prestige
+    prestige_rewards::points_bonus: 5000 # Points awarded per prestige
+    
+    # Achievement bonus per prestige
+    prestige_rewards::achievement_bonus: 10 # Achievements unlocked per prestige
+
+# Function to check prestige eligibility
+function checkPrestigeEligibility(p: player) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    set {_current_prestige} to {player::%{_uuid}%::prestige_level} ? 0
+    
+    # Check all requirements
+    if not checkClickRequirement({_p}, {_current_prestige}):
+        return false
+    if not checkRaceRequirement({_p}, {_current_prestige}):
+        return false
+    if not checkTrackRequirement({_p}, {_current_prestige}):
+        return false
+    if not checkAchievementRequirement({_p}, {_current_prestige}):
+        return false
+    if not checkComboRequirement({_p}, {_current_prestige}):
+        return false
+    if not checkTimeRequirement({_p}, {_current_prestige}):
+        return false
+    if not checkMultiplayerRequirement({_p}, {_current_prestige}):
+        return false
+    
+    return true
+
+# Function to check click requirement
+function checkClickRequirement(p: player, prestige_level: number) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    set {_clicks} to {player::%{_uuid}%::clicks} ? 0
+    set {_required_clicks} to {@prestige_requirements::clicks_base} + ({@prestige_requirements::clicks_per_prestige} * {_prestige_level})
+    return {_clicks} >= {_required_clicks}
+
+# Function to check race requirement
+function checkRaceRequirement(p: player, prestige_level: number) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    set {_races_won} to {player::%{_uuid}%::races_won} ? 0
+    set {_required_races} to {@prestige_requirements::races_won_base} + ({@prestige_requirements::races_won_per_prestige} * {_prestige_level})
+    return {_races_won} >= {_required_races}
+
+# Function to check track requirement
+function checkTrackRequirement(p: player, prestige_level: number) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    set {_tracks_completed} to {player::%{_uuid}%::tracks_completed} ? 0
+    set {_required_tracks} to {@prestige_requirements::tracks_completed_base} + ({@prestige_requirements::tracks_completed_per_prestige} * {_prestige_level})
+    return {_tracks_completed} >= {_required_tracks}
+
+# Function to check achievement requirement
+function checkAchievementRequirement(p: player, prestige_level: number) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    set {_achievements} to 0
+    loop all keys of {achievements_list::*}:
+        if {player::%{_uuid}%::achievements::%loop-value%} is true:
+            add 1 to {_achievements}
+    set {_required_achievements} to {@prestige_requirements::achievements_base} + ({@prestige_requirements::achievements_per_prestige} * {_prestige_level})
+    return {_achievements} >= {_required_achievements}
+
+# Function to check combo requirement
+function checkComboRequirement(p: player, prestige_level: number) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    set {_max_combo} to {player::%{_uuid}%::max_combo} ? 0
+    set {_required_combo} to {@prestige_requirements::max_combo_base} + ({@prestige_requirements::max_combo_per_prestige} * {_prestige_level})
+    return {_max_combo} >= {_required_combo}
+
+# Function to check time requirement
+function checkTimeRequirement(p: player, prestige_level: number) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    set {_total_time} to {player::%{_uuid}%::total_time} ? 0
+    set {_required_time} to {@prestige_requirements::total_time_base} + ({@prestige_requirements::total_time_per_prestige} * {_prestige_level})
+    return {_total_time} >= {_required_time}
+
+# Function to check multiplayer requirement
+function checkMultiplayerRequirement(p: player, prestige_level: number) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    set {_multiplayer_wins} to {player::%{_uuid}%::multiplayer_wins} ? 0
+    set {_required_wins} to {@prestige_requirements::multiplayer_wins_base} + ({@prestige_requirements::multiplayer_wins_per_prestige} * {_prestige_level})
+    return {_multiplayer_wins} >= {_required_wins}
+
+# Function to get prestige requirements
+function getPrestigeRequirements(p: player) :: text:
+    set {_uuid} to {_p}'s uuid
+    set {_current_prestige} to {player::%{_uuid}%::prestige_level} ? 0
+    
+    set {_clicks} to {player::%{_uuid}%::clicks} ? 0
+    set {_races_won} to {player::%{_uuid}%::races_won} ? 0
+    set {_tracks_completed} to {player::%{_uuid}%::tracks_completed} ? 0
+    set {_achievements} to 0
+    loop all keys of {achievements_list::*}:
+        if {player::%{_uuid}%::achievements::%loop-value%} is true:
+            add 1 to {_achievements}
+    set {_max_combo} to {player::%{_uuid}%::max_combo} ? 0
+    set {_total_time} to {player::%{_uuid}%::total_time} ? 0
+    set {_multiplayer_wins} to {player::%{_uuid}%::multiplayer_wins} ? 0
+    
+    set {_req_clicks} to {@prestige_requirements::clicks_base} + ({@prestige_requirements::clicks_per_prestige} * {_current_prestige})
+    set {_req_races} to {@prestige_requirements::races_won_base} + ({@prestige_requirements::races_won_per_prestige} * {_current_prestige})
+    set {_req_tracks} to {@prestige_requirements::tracks_completed_base} + ({@prestige_requirements::tracks_completed_per_prestige} * {_current_prestige})
+    set {_req_achievements} to {@prestige_requirements::achievements_base} + ({@prestige_requirements::achievements_per_prestige} * {_current_prestige})
+    set {_req_combo} to {@prestige_requirements::max_combo_base} + ({@prestige_requirements::max_combo_per_prestige} * {_current_prestige})
+    set {_req_time} to {@prestige_requirements::total_time_base} + ({@prestige_requirements::total_time_per_prestige} * {_current_prestige})
+    set {_req_wins} to {@prestige_requirements::multiplayer_wins_base} + ({@prestige_requirements::multiplayer_wins_per_prestige} * {_current_prestige})
+    
+    return "&6Prestige Requirements (Level %{_current_prestige}%):\n" +
+        "&eClicks: &a%{_clicks}%/%{_req_clicks}%\n" +
+        "&eRaces Won: &a%{_races_won}%/%{_req_races}%\n" +
+        "&eTracks Completed: &a%{_tracks_completed}%/%{_req_tracks}%\n" +
+        "&eAchievements: &a%{_achievements}%/%{_req_achievements}%\n" +
+        "&eMax Combo: &a%{_max_combo}%/%{_req_combo}%\n" +
+        "&eTime Played: &a%{_total_time}%/%{_req_time}%\n" +
+        "&eMultiplayer Wins: &a%{_multiplayer_wins}%/%{_req_wins}%"
+
+# Command to check prestige requirements
+command /prestige:
+    trigger:
+        send "{@prefix} %{getPrestigeRequirements(player)}%" to player
+        if checkPrestigeEligibility(player) is true:
+            send "{@prefix} &aYou are eligible for prestige! Type /prestigeup to prestige!" to player
+        else:
+            send "{@prefix} &cYou need to meet all requirements to prestige!" to player
+
+# Command to prestige up
+command /prestigeup:
+    trigger:
+        if checkPrestigeEligibility(player) is true:
+            prestigeUp(player)
+        else:
+            send "{@prefix} &cYou don't meet the requirements to prestige yet!" to player
+
+# Function to prestige up
+function prestigeUp(p: player):
+    set {_uuid} to {_p}'s uuid
+    set {_current_prestige} to {player::%{_uuid}%::prestige_level} ? 0
+    
+    # Reset stats
+    set {player::%{_uuid}%::clicks} to 0
+    set {player::%{_uuid}%::races_won} to 0
+    set {player::%{_uuid}%::tracks_completed} to 0
+    set {player::%{_uuid}%::max_combo} to 0
+    set {player::%{_uuid}%::total_time} to 0
+    set {player::%{_uuid}%::multiplayer_wins} to 0
+    
+    # Increment prestige level
+    add 1 to {_current_prestige}
+    set {player::%{_uuid}%::prestige_level} to {_current_prestige}
+    
+    # Apply prestige rewards
+    set {_power_bonus} to {@prestige_rewards::power_bonus} * {_current_prestige}
+    set {_speed_bonus} to {@prestige_rewards::speed_bonus} * {_current_prestige}
+    set {_combo_bonus} to {@prestige_rewards::combo_bonus} * {_current_prestige}
+    set {_accuracy_bonus} to {@prestige_rewards::accuracy_bonus} * {_current_prestige}
+    set {_points_bonus} to {@prestige_rewards::points_bonus} * {_current_prestige}
+    set {_achievement_bonus} to {@prestige_rewards::achievement_bonus} * {_current_prestige}
+    
+    # Update bonuses
+    set {player::%{_uuid}%::prestige_bonus_click_power} to {_power_bonus}
+    set {player::%{_uuid}%::prestige_bonus_speed} to {_speed_bonus}
+    set {player::%{_uuid}%::prestige_bonus_combo} to {_combo_bonus}
+    set {player::%{_uuid}%::prestige_bonus_accuracy} to {_accuracy_bonus}
+    
+    # Give points and achievements
+    add {_points_bonus} to {player::%{_uuid}%::points}
+    
+    # Send message
+    send title "&6Prestige Up!" to {_p} with subtitle "&eLevel %{_current_prestige}%" for 3 seconds
+    send "{@prefix} &aYou've prestiged to Level %{_current_prestige}%!\n" +
+        "&ePower Bonus: &a+%{_power_bonus}x\n" +
+        "&eSpeed Bonus: &a+%{_speed_bonus}x\n" +
+        "&eCombo Bonus: &a+%{_combo_bonus}x\n" +
+        "&eAccuracy Bonus: &a+%{_accuracy_bonus}x\n" +
+        "&ePoints Bonus: &a+%{_points_bonus}\n" +
+        "&eAchievement Bonus: &a+%{_achievement_bonus}" to {_p}
+    
+    # Play prestige sound
+    play sound "minecraft:entity.player.levelup" to {_p} with volume 1 pitch 2.0
+    
+    # Broadcast to nearby players
+    broadcast "{@prefix} &6%{_p}% has prestiged to Level %{_current_prestige}%!" to players within 100 blocks of {_p}
+
+function showPrestigeProgress(p: player):
+    "&eClicks: &a%{_clicks}%/%{_req_clicks}%\n" +
+    "&eRaces Won: &a%{_races_won}%/%{_req_races}%\n" +
+    "&eTracks Completed: &a%{_tracks_completed}%/%{_req_tracks}%\n" +
+    "&eAchievements: &a%{_achievements}%/%{_req_achievements}%\n" +
+    "&eMax Combo: &a%{_max_combo}%/%{_req_combo}%\n" +
+    "&eTime Played: &a%{_total_time}%/%{_req_time}%\n" +
+    "&eMultiplayer Wins: &a%{_multiplayer_wins}%/%{_req_wins}%"
+
+function showPrestigeBonuses(p: player):
+    "&ePower Bonus: &a+%{_power_bonus}x\n" +
+    "&eSpeed Bonus: &a+%{_speed_bonus}x\n" +
+    "&eCombo Bonus: &a+%{_combo_bonus}x\n" +
+    "&eAccuracy Bonus: &a+%{_accuracy_bonus}x\n" +
+    "&ePoints Bonus: &a+%{_points_bonus}\n" +
+    "&eAchievement Bonus: &a+%{_achievement_bonus}" to {_p}

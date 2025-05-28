@@ -1,0 +1,126 @@
+# File: race_cameras.sk
+# Description: Race-specific camera angles and views
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Camera modes
+    camera_modes: "follow,behind,side,above,free" # Available camera modes
+    # Camera settings
+    follow_distance: 3 blocks # Distance behind for follow camera
+    follow_height: 1.5 blocks # Height above ground for follow camera
+    side_offset: 4 blocks # Horizontal offset for side camera
+    side_height: 2 blocks # Height above ground for side camera
+    above_height: 5 blocks # Height above for above camera
+    free_camera_speed: 0.5 # Speed multiplier for free camera movement
+    
+# Variables:
+# {player::%uuid%::camera_mode} = text (current camera mode)
+# {player::%uuid%::free_camera_location} = location (for free camera mode)
+# {player::%uuid%::free_camera_target} = location (target location in free camera mode)
+
+# Function to set camera mode
+function setCameraMode(p: player, mode: text):
+    set {_uuid} to {_p}'s uuid
+    set {player::%{_uuid}%::camera_mode} to {_mode}
+    
+    # Send message
+    send "{@prefix} &aCamera Mode: &e%{_mode}%" to {_p}
+    
+    # Update camera position
+    updateCameraPosition({_p})
+
+# Function to update camera position
+function updateCameraPosition(p: player):
+    set {_uuid} to {_p}'s uuid
+    set {_mode} to {player::%{_uuid}%::camera_mode} ? "follow"
+    
+    if {player::%{_uuid}%::race_citizen_entity_id} is not set:
+        return
+    
+    set {_citizen} to entity from uuid {player::%{_uuid}%::race_citizen_entity_id}
+    set {_citizen_loc} to location of {_citizen}
+    
+    if {_mode} is "follow":
+        # Follow camera behind citizen
+        set {_camera_loc} to {_citizen_loc} add vector(0, {@follow_height}, -{@follow_distance})
+    else if {_mode} is "behind":
+        # Fixed behind view
+        set {_camera_loc} to {_citizen_loc} add vector(0, {@follow_height}, -{@follow_distance})
+    else if {_mode} is "side":
+        # Side view
+        set {_camera_loc} to {_citizen_loc} add vector({@side_offset}, {@side_height}, 0)
+    else if {_mode} is "above":
+        # Top-down view
+        set {_camera_loc} to {_citizen_loc} add vector(0, {@above_height}, 0)
+    else if {_mode} is "free":
+        # Free camera mode
+        if {player::%{_uuid}%::free_camera_location} is not set:
+            set {player::%{_uuid}%::free_camera_location} to {_citizen_loc}
+        set {_camera_loc} to {player::%{_uuid}%::free_camera_location}
+    
+    # Update camera position
+    set camera location of {_p} to {_camera_loc}
+    
+    # Update camera rotation
+    if {_mode} is not "free":
+        set {_look_at} to {_citizen_loc}
+        set camera rotation of {_p} to look at {_look_at}
+
+# Function to handle free camera movement
+every 1 tick:
+    loop all players:
+        if {player::%loop-player's uuid%::camera_mode} is "free":
+            set {_p} to loop-player
+            set {_uuid} to {_p}'s uuid
+            
+            # Get movement input
+            set {_forward} to 0
+            set {_right} to 0
+            
+            if {_p} is holding "forward":
+                add 1 to {_forward}
+            if {_p} is holding "back":
+                subtract 1 from {_forward}
+            if {_p} is holding "left":
+                subtract 1 from {_right}
+            if {_p} is holding "right":
+                add 1 to {_right}
+            
+            # Calculate movement vector
+            set {_move_vec} to vector({_right}, 0, {_forward})
+            
+            # Get current location
+            set {_loc} to {player::%{_uuid}%::free_camera_location}
+            
+            # Move camera
+            set {_new_loc} to {_loc} add {_move_vec} multiply {@free_camera_speed}
+            set {player::%{_uuid}%::free_camera_location} to {_new_loc}
+            
+            # Update camera position
+            set camera location of {_p} to {_new_loc}
+
+# Command to change camera mode
+command /camera <text>:
+    trigger:
+        if arg-1 is in {@camera_modes}:
+            setCameraMode(player, arg-1)
+        else:
+            send "{@prefix} &cInvalid camera mode! Available modes: %{@camera_modes}%" to player
+
+# Command to list available camera modes
+command /cameras:
+    trigger:
+        send "{@prefix} &aAvailable Camera Modes:" to player
+        loop {@camera_modes} split by ",":
+            send "&e- %loop-value%" to player
+
+# Function to get current camera mode
+function getCurrentCameraMode(p: player) :: text:
+    set {_uuid} to {_p}'s uuid
+    return {player::%{_uuid}%::camera_mode} ? "follow"
+
+# Function to reset camera to default
+function resetCamera(p: player):
+    set {_uuid} to {_p}'s uuid
+    set {player::%{_uuid}%::camera_mode} to "follow"
+    updateCameraPosition({_p})

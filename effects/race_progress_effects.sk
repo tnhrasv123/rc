@@ -1,0 +1,111 @@
+# File: race_progress_effects.sk
+# Description: Visual effects for race progress and position indicators
+
+options:
+    prefix: &6&lRaceClicker &8»
+    progress_particle_interval: 5 ticks # How often to update progress particles
+    position_indicator_interval: 10 ticks # How often to update position indicators
+    position_indicator_height: 3 # Height above citizen for position indicator
+    position_indicator_duration: 20 ticks # Duration of position indicator display
+    
+# Variables:
+# {player::%player's uuid%::last_progress_particle_update} - Timestamp of last particle update
+# {player::%player's uuid%::last_position_indicator_update} - Timestamp of last position update
+
+# Function to create position indicator above citizen
+function createPositionIndicator(p: player, position: number):
+    set {_uuid} to {_p}'s uuid
+    if {player::%{_uuid}%::race_citizen_entity_id} is set:
+        set {_citizen} to entity from uuid {player::%{_uuid}%::race_citizen_entity_id}
+        if {_citizen} is set:
+            set {_loc} to location of {_citizen}
+            set {_loc} to {_loc} add vector(0, {@position_indicator_height}, 0)
+            
+            # Create position number above citizen
+            spawn 10 of particle "text" with text "&e#%{_position}%" at {_loc}
+            
+            # Add small particles around the number for visual effect
+            loop 5 times:
+                set {_offset} to vector(random between -0.5 and 0.5, 0, random between -0.5 and 0.5)
+                spawn particle "crit" at {_loc} add {_offset}
+
+# Function to create progress trail particles
+function createProgressTrail(p: player):
+    set {_uuid} to {_p}'s uuid
+    if {player::%{_uuid}%::race_citizen_entity_id} is set:
+        set {_citizen} to entity from uuid {player::%{_uuid}%::race_citizen_entity_id}
+        if {_citizen} is set:
+            set {_loc} to location of {_citizen}
+            
+            # Create trail particles showing progress
+            set {_progress} to {player::%{_uuid}%::race_progress_current_race}
+            set {_color} to "white"
+            
+            # Change color based on progress
+            if {_progress} < 100:
+                set {_color} to "red"
+            else if {_progress} < 200:
+                set {_color} to "orange"
+            else if {_progress} < 300:
+                set {_color} to "yellow"
+            else if {_progress} < 400:
+                set {_color} to "green"
+            else:
+                set {_color} to "blue"
+            
+            # Spawn colored particles
+            spawn 5 of particle "{_color}_dust" at {_loc} offset by vector(0.2, 0.2, 0.2)
+
+# Main loop for progress effects
+every {@progress_particle_interval}:
+    loop all players:
+        if {player::%loop-player's uuid%::in_race} is true:
+            set {_p} to loop-player
+            
+            # Update progress trail
+            createProgressTrail({_p})
+            
+            # Update position indicator if enough time has passed
+            if now - {player::%{_p}'s uuid%::last_position_indicator_update} > {@position_indicator_interval}:
+                set {player::%{_p}'s uuid%::last_position_indicator_update} to now
+                
+                # Calculate position (1 for first, etc.)
+                set {_position} to 1
+                loop {race::finished_players::*}:
+                    if loop-value-1 is not {_p}:
+                        add 1 to {_position}
+                
+                createPositionIndicator({_p}, {_position})
+
+# Function to create finish line celebration effects
+function createFinishLineEffects(p: player):
+    set {_uuid} to {_p}'s uuid
+    if {player::%{_uuid}%::race_citizen_entity_id} is set:
+        set {_citizen} to entity from uuid {player::%{_uuid}%::race_citizen_entity_id}
+        if {_citizen} is set:
+            set {_loc} to location of {_citizen}
+            
+            # Create fireworks
+            spawn particle "fireworks_spark" at {_loc} offset by vector(1, 1, 1)
+            
+            # Create confetti
+            loop 20 times:
+                set {_angle} to loop-number * (360 / 20)
+                set {_offset} to vector(sin({_angle}), 0.5, cos({_angle})) multiply 2
+                spawn particle "happy_villager" at {_loc} add {_offset}
+
+# Function to create obstacle effects
+function createObstacleEffect(p: player, type: text):
+    set {_uuid} to {_p}'s uuid
+    if {player::%{_uuid}%::race_citizen_entity_id} is set:
+        set {_citizen} to entity from uuid {player::%{_uuid}%::race_citizen_entity_id}
+        if {_citizen} is set:
+            set {_loc} to location of {_citizen}
+            
+            if {_type} is "slow_down":
+                # Create slow motion visual
+                spawn particle "slime" at {_loc} offset by vector(0.5, 0.5, 0.5)
+                
+            else if {_type} is "speed_boost":
+                # Create speed boost visual
+                spawn particle "speed" at {_loc} offset by vector(0.5, 0.5, 0.5)

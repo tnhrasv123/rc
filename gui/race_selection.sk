@@ -1,0 +1,146 @@
+# File: race_selection.sk
+# Description: Race selection GUI for players to choose tracks
+
+options:
+    prefix: &6&lRaceClicker &8»
+    gui_rows: 3
+    min_players_to_start: 2 # Default minimum players to start a race
+    
+# Variables:
+# {gui::race_selection::*} - List of available tracks in GUI
+
+# Command to open race selection GUI
+command /races:
+    aliases: /tracks
+    trigger:
+        openRaceSelectionGUI(player)
+
+# Function to open race selection GUI
+function openRaceSelectionGUI(p: player):
+    set {_uuid} to {_p}'s uuid
+    
+    # Get list of available tracks
+    set {_tracks} to all keys of {tracks::*}
+    if size of {_tracks} < 1:
+        send "{@prefix} &cNo tracks available yet!" to {_p}
+        stop
+    
+    # Sort tracks by difficulty
+    set {_sorted_tracks::*} to []
+    loop {_tracks}:
+        set {_track_id} to loop-value
+        set {_difficulty} to {tracks::%{_track_id}%::difficulty} ? 1
+        add {_track_id} to {_sorted_tracks::*} sorted by {_difficulty}
+    
+    # Create GUI
+    create a gui with virtual chest inventory with {%gui_rows%} rows named "&8&nRace Selection"
+    
+    # Add decorative items
+    loop 27 times:
+        if loop-number - 1 is 0 or 1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 17 or 18 or 19 or 20 or 21 or 23 or 24 or 25 or 26:
+            if gui-inventory is not set for slot (loop-number - 1) of current gui:
+                make gui slot (loop-number - 1) with gray stained glass pane named " "
+    
+    # Add track selection buttons
+    set {_slot} to 10
+    loop {_sorted_tracks::*}:
+        if loop-index > 9: # Only show first 9 tracks in GUI
+            continue
+            
+        set {_track_id} to loop-value
+        set {_track_name} to {tracks::%{_track_id}%::name}
+        set {_track_length} to {tracks::%{_track_id}%::length}
+        set {_difficulty} to {tracks::%{_track_id}%::difficulty} ? 1
+        
+        # Get player's best time for this track
+        set {_best_time} to {player::%{_uuid}%::stats::best_times::%{_track_id}%}
+        if {_best_time} is not set:
+            set {_best_time} to "-"
+        else:
+            set {_best_time} to formatTimespan({_best_time})
+            
+        # Get track status
+        set {_status} to "&aAvailable"
+        if {track::%{_track_id}%::locked} is true:
+            set {_status} to "&cLocked"
+        else if {track::%{_track_id}%::maintenance} is true:
+            set {_status} to "&eMaintenance"
+        
+        # Create track item
+        if {_status} is "&aAvailable":
+            make gui slot {_slot} with emerald block named "&a%{_track_name}%" with lore "&7Length: &e%{_track_length}% blocks" and "&7Difficulty: &e%{_difficulty}%" and "&7Best Time: &e%{_best_time}%" and "&7Status: %{_status}%" and "" and "&eClick to join race!" to run function joinRace({_p}, {_track_id})
+        else:
+            make gui slot {_slot} with gray stained glass pane named "&7%{_track_name}%" with lore "&7Length: &e%{_track_length}% blocks" and "&7Difficulty: &e%{_difficulty}%" and "&7Best Time: &e%{_best_time}%" and "&7Status: %{_status}%" and "" and "&cTrack Unavailable"
+        
+        add 1 to {_slot}
+        
+        # Add separator after every 3 tracks
+        if loop-index % 3 = 0:
+            make gui slot {_slot} with gray stained glass pane named " "
+            add 1 to {_slot}
+    
+    # Add back button
+    make gui slot 26 with red stained glass pane named "&cBack" to run function closeGUI({_p})
+    
+    open last gui to {_p}
+
+# Function to handle track selection
+function joinRace(p: player, track_id: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Check if player is already in a race
+    if {player::%{_uuid}%::in_race} is true:
+        send "{@prefix} &cYou're already in a race!" to {_p}
+        return
+    
+    # Check if track exists and is available
+    if {tracks::%{_track_id}%::name} is not set:
+        send "{@prefix} &cTrack %{_track_id}% not found!" to {_p}
+        return
+    if {track::%{_track_id}%::locked} is true:
+        send "{@prefix} &cThis track is currently locked!" to {_p}
+        return
+    if {track::%{_track_id}%::maintenance} is true:
+        send "{@prefix} &eThis track is under maintenance!" to {_p}
+        return
+    
+    # Check player requirements
+    set {_difficulty} to {tracks::%{_track_id}%::difficulty} ? 1
+    if {_difficulty} > {player::%{_uuid}%::max_difficulty}:
+        send "{@prefix} &cYou need to reach difficulty level %{_difficulty}% to access this track!" to {_p}
+        return
+    
+    # Check race cooldown
+    if {player::%{_uuid}%::last_race} is set:
+        set {_last_race} to {player::%{_uuid}%::last_race}
+        set {_cooldown} to 300 # 5 minutes cooldown
+        if now - {_last_race} < {_cooldown}:
+            set {_remaining} to {_cooldown} - (now - {_last_race})
+            send "{@prefix} &cYou must wait %{formatTimespan({_remaining})}% before joining another race!" to {_p}
+            return
+    
+    # Add player to race
+    add {_p} to {race::players::*}
+    set {player::%{_uuid}%::current_track_id} to {_track_id}
+    set {player::%{_uuid}%::in_race} to true
+    set {player::%{_uuid}%::last_race} to now
+    
+    # Create citizen for race
+    create new citizen named "RaceCitizen_%{_uuid}_%{_track_id}%" at {tracks::%{_track_id}%::start_location}
+    set {player::%{_uuid}%::race_citizen_entity_id} to last created citizen's uuid
+    
+    # Enable race camera
+    enableRaceCamera({_p}, entity from uuid {player::%{_uuid}%::race_citizen_entity_id})
+    
+    # Start countdown if enough players
+    if size({race::players::*}) >= {@min_players_to_start}:
+        startRaceCountdown({_track_id})
+    else:
+        set {_player_count} to size({race::players::*})
+        send "{@prefix} &aWaiting for more players... (%{_player_count}%/%{@min_players_to_start}%)
+        send "{@prefix} &7Track: %{_track_name}% &7| Difficulty: %{_difficulty}%" to {_p}
+
+# Function to close GUI
+function closeGUI(p: player):
+    close inventory of {_p}
+    send "{@prefix} &aClosed race selection menu." to {_p}

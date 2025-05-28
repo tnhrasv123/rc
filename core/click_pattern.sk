@@ -1,0 +1,89 @@
+# File: click_pattern.sk
+# Description: Click pattern system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    pattern_detection_interval: 5 ticks # How often to check for patterns
+    pattern_reward_multiplier: 1.5 # Multiplier for matching patterns
+    pattern_display_duration: 3 seconds # How long to show pattern hints
+    pattern_types: "simple,advanced,expert" # Available pattern types
+    
+# Variables:
+# {player::%uuid%::current_pattern} = text (current pattern being matched)
+# {player::%uuid%::pattern_progress} = number (progress in current pattern)
+# {player::%uuid%::last_pattern_click} = timestamp (last click time for pattern)
+# {player::%uuid%::pattern_multiplier} = number (current pattern multiplier)
+
+# Function to generate a random pattern
+function generatePattern(type: text) :: text:
+    if {_type} is "simple":
+        return choose from "left,right", "left,right,right", "right,left,right"
+    else if {_type} is "advanced":
+        return choose from "left,right,left,right", "right,left,right,left", "left,right,right,left,right"
+    else if {_type} is "expert":
+        return choose from "left,right,left,right,left,right", "right,left,right,left,right,left", "left,right,right,left,right,right,left"
+    return "left,right" # Default if type not recognized
+
+# Function to check if click matches pattern
+function checkPatternMatch(p: player, click_type: text):
+    set {_uuid} to {_p}'s uuid
+    set {_pattern} to {player::%{_uuid}%::current_pattern} ? generatePattern("simple")
+    set {_progress} to {player::%{_uuid}%::pattern_progress} ? 0
+    
+    # Split pattern into array
+    set {_pattern_array} to split {_pattern} by ","
+    
+    # Check if click matches current position
+    if {_click_type} is {_pattern_array}[_progress]:
+        add 1 to {_progress}
+        set {player::%{_uuid}%::pattern_progress} to {_progress}
+        
+        # If pattern completed
+        if {_progress} >= size of {_pattern_array}:
+            # Give reward
+            set {_multiplier} to {@pattern_reward_multiplier}
+            set {player::%{_uuid}%::pattern_multiplier} to {_multiplier}
+            send "{@prefix} &aPattern Completed! &e+%{_multiplier}x Power!" to {_p}
+            
+            # Start new pattern
+            set {player::%{_uuid}%::pattern_progress} to 0
+            set {player::%{_uuid}%::current_pattern} to generatePattern(choose from "simple", "advanced", "expert")
+            
+            # Show next pattern hint
+            set {_next_pattern} to {player::%{_uuid}%::current_pattern}
+            send title "&6Pattern: &e%{_next_pattern}%" to {_p} for {@pattern_display_duration}
+    else:
+        # Reset pattern on mismatch
+        set {player::%{_uuid}%::pattern_progress} to 0
+        set {player::%{_uuid}%::current_pattern} to generatePattern("simple")
+        set {player::%{_uuid}%::pattern_multiplier} to 1
+        send "{@prefix} &cPattern Reset!" to {_p}
+
+# Main click pattern detection loop
+every {@pattern_detection_interval}:
+    loop all players:
+        set {_p} to loop-player
+        set {_uuid} to {_p}'s uuid
+        
+        # Check if player is in a race
+        if {player::%{_uuid}%::in_race} is true:
+            # Show pattern hint if not already shown
+            if {player::%{_uuid}%::last_pattern_click} is not set or now - {player::%{_uuid}%::last_pattern_click} > 10 seconds:
+                set {player::%{_uuid}%::last_pattern_click} to now
+                set {_pattern} to {player::%{_uuid}%::current_pattern} ? generatePattern("simple")
+                send title "&6Pattern: &e%{_pattern}%" to {_p} for 2 seconds
+
+# Event handler for left click
+on left click:
+    if player has permission "raceclicker.play":
+        checkPatternMatch(player, "left")
+
+# Event handler for right click
+on right click:
+    if player has permission "raceclicker.play":
+        checkPatternMatch(player, "right")
+
+# Function to get current pattern multiplier
+function getCurrentPatternMultiplier(p: player) :: number:
+    set {_uuid} to {_p}'s uuid
+    return {player::%{_uuid}%::pattern_multiplier} ? 1

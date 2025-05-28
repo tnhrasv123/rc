@@ -1,0 +1,239 @@
+# File: prestige_system.sk
+# Description: Prestige system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Prestige settings
+    prestige_levels: ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster", "Champion"]
+    
+    # Prestige requirements
+    prestige_requirements:
+        bronze: 1000000
+        silver: 5000000
+        gold: 10000000
+        platinum: 50000000
+        diamond: 100000000
+        master: 500000000
+        grandmaster: 1000000000
+        champion: 5000000000
+    
+    # Prestige rewards
+    prestige_rewards:
+        bronze: ["ClickCoins:100000", "Speed Boost:500", "Prestige Title:Bronze"]
+        silver: ["ClickCoins:250000", "Speed Boost:1000", "Power Boost:500", "Prestige Title:Silver"]
+        gold: ["ClickCoins:500000", "Speed Boost:2000", "Power Boost:1000", "Combo Boost:500", "Prestige Title:Gold"]
+        platinum: ["ClickCoins:1000000", "Speed Boost:5000", "Power Boost:2000", "Combo Boost:1000", "Accuracy Boost:500", "Prestige Title:Platinum"]
+        diamond: ["ClickCoins:2000000", "Speed Boost:10000", "Power Boost:5000", "Combo Boost:2000", "Accuracy Boost:1000", "Prestige Title:Diamond"]
+        master: ["ClickCoins:5000000", "Speed Boost:20000", "Power Boost:10000", "Combo Boost:5000", "Accuracy Boost:2000", "Prestige Title:Master", "Special Item:Master's Token"]
+        grandmaster: ["ClickCoins:10000000", "Speed Boost:50000", "Power Boost:20000", "Combo Boost:10000", "Accuracy Boost:5000", "Prestige Title:Grandmaster", "Special Item:Grandmaster's Token", "Guild Boost:1000"]
+        champion: ["ClickCoins:50000000", "Speed Boost:100000", "Power Boost:50000", "Combo Boost:20000", "Accuracy Boost:10000", "Prestige Title:Champion", "Special Item:Champion's Token", "Guild Boost:2000", "Market Boost:1000"]
+
+# Variables:
+# {player::%uuid%::prestige_level} = text (current prestige level)
+# {player::%uuid%::prestige_points} = number (prestige points)
+# {player::%uuid%::prestige_title} = text (prestige title)
+# {player::%uuid%::prestige_rewards::*} = text (claimed prestige rewards)
+
+# Function to initialize prestige system
+on join:
+    set {_p} to player
+    set {_uuid} to {_p}'s uuid
+    
+    # Initialize prestige variables
+    if not {player::%{_uuid}%::prestige_level} is set:
+        set {player::%{_uuid}%::prestige_level} to "Bronze"
+    if not {player::%{_uuid}%::prestige_points} is set:
+        set {player::%{_uuid}%::prestige_points} to 0
+    if not {player::%{_uuid}%::prestige_title} is set:
+        set {player::%{_uuid}%::prestige_title} to "Bronze"
+    if not {player::%{_uuid}%::prestige_rewards::*} is set:
+        set {player::%{_uuid}%::prestige_rewards::*} to []
+
+# Function to check prestige requirements
+function checkPrestigeRequirements(p: player):
+    set {_uuid} to {_p}'s uuid
+    set {_current_level} to {player::%{_uuid}%::prestige_level}
+    set {_current_index} to index of {_current_level} in {@prestige_levels}
+    
+    # Check if player can prestige
+    if {_current_index} < size of {@prestige_levels} - 1:
+        set {_next_level} to element of {@prestige_levels} at {_current_index} + 1
+        set {_required_points} to {@prestige_requirements::%{_next_level}%}
+        
+        if {player::%{_uuid}%::clickcoins} >= {_required_points}:
+            # Check if player has already claimed this prestige level
+            if {_next_level} in {player::%{_uuid}%::prestige_rewards::*}:
+                send "{@prefix} &cYou have already claimed this prestige level!" to {_p}
+                return
+            
+            # Give prestige rewards
+            givePrestigeRewards({_p}, {_next_level})
+            
+            # Update prestige level
+            set {player::%{_uuid}%::prestige_level} to {_next_level}
+            set {player::%{_uuid}%::prestige_title} to {_next_level}
+            
+            # Reset ClickCoins
+            set {player::%{_uuid}%::clickcoins} to 0
+            
+            # Update prestige rewards list
+            add {_next_level} to {player::%{_uuid}%::prestige_rewards::*}
+            
+            # Notify player
+            send "{@prefix} &6Prestige Upgraded! New level: %{_next_level}%" to {_p}
+            broadcast "{@prefix} &6%{_p}% reached prestige level %{_next_level}%!" to players with permission "raceclicker.prestige.view"
+
+# Function to give prestige rewards
+function givePrestigeRewards(p: player, level: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Get rewards for this level
+    set {_rewards} to {@prestige_rewards::%{_level}%}
+    
+    # Give each reward
+    loop {_rewards}:
+        set {_reward} to loop-value
+        split {_reward} by ":"
+        set {_type} to element 0 of {_reward}
+        set {_amount} to element 1 of {_reward} as number
+        
+        switch {_type}:
+            case "ClickCoins":
+                add {_amount} to {player::%{_uuid}%::clickcoins}
+                break
+            case "Speed Boost":
+                add {_amount} to {player::%{_uuid}%::speed_boost}
+                break
+            case "Power Boost":
+                add {_amount} to {player::%{_uuid}%::power_boost}
+                break
+            case "Combo Boost":
+                add {_amount} to {player::%{_uuid}%::combo_boost}
+                break
+            case "Accuracy Boost":
+                add {_amount} to {player::%{_uuid}%::accuracy_boost}
+                break
+            case "Prestige Title":
+                set {player::%{_uuid}%::prestige_title} to {_amount}
+                break
+            case "Special Item":
+                give {_amount} to {_p}
+                break
+            case "Guild Boost":
+                add {_amount} to {player::%{_uuid}%::guild_boost}
+                break
+            case "Market Boost":
+                add {_amount} to {player::%{_uuid}%::market_boost}
+                break
+            case "Prestige Points":
+                add {_amount} to {player::%{_uuid}%::prestige_points}
+                break
+            case "Track Boost":
+                add {_amount} to {player::%{_uuid}%::track_boost}
+                break
+            case "Race Boost":
+                add {_amount} to {player::%{_uuid}%::race_boost}
+                break
+            case "Combo Multiplier":
+                add {_amount} to {player::%{_uuid}%::combo_multiplier}
+                break
+            case "Click Multiplier":
+                add {_amount} to {player::%{_uuid}%::click_multiplier}
+                break
+        
+        # Send reward notification
+        send "{@prefix} &6Received %{_amount}% %{_type}% from prestige level %{_level}%" to {_p}
+
+# Function to prestige
+command /prestige:
+    permission: raceclicker.prestige
+    trigger:
+        set {_p} to player
+        set {_uuid} to {_p}'s uuid
+        
+        # Check if player can prestige
+        if {player::%{_uuid}%::prestige_level} is "Champion":
+            send "{@prefix} &cYou have reached the maximum prestige level!" to {_p}
+            return
+            
+        set {_current_level} to {player::%{_uuid}%::prestige_level}
+        set {_current_index} to index of {_current_level} in {@prestige_levels}
+        set {_next_level} to element of {@prestige_levels} at {_current_index} + 1
+        set {_required_points} to {@prestige_requirements::%{_next_level}%}
+        
+        if {player::%{_uuid}%::clickcoins} < {_required_points}:
+            send "{@prefix} &cYou need %{_required_points}% ClickCoins to prestige!" to {_p}
+            return
+            
+        # Confirm prestige
+        send "{@prefix} &6Type /prestigeconfirm to confirm prestige to %{_next_level}%" to {_p}
+        set {player::%{_uuid}%::prestige_confirm} to true
+        wait 30 seconds
+        if {player::%{_uuid}%::prestige_confirm} is true:
+            set {player::%{_uuid}%::prestige_confirm} to false
+            send "{@prefix} &cPrestige confirmation expired!" to {_p}
+
+command /prestigeconfirm:
+    permission: raceclicker.prestige
+    trigger:
+        set {_p} to player
+        set {_uuid} to {_p}'s uuid
+        
+        if {player::%{_uuid}%::prestige_confirm} is not true:
+            send "{@prefix} &cNo pending prestige confirmation!" to {_p}
+            return
+            
+        # Process prestige
+        checkPrestigeRequirements({_p})
+        set {player::%{_uuid}%::prestige_confirm} to false
+
+# Function to view prestige
+command /prestigeview:
+    permission: raceclicker.prestige.view
+    trigger:
+        set {_p} to player
+        set {_uuid} to {_p}'s uuid
+        
+        # Get current prestige info
+        set {_current_level} to {player::%{_uuid}%::prestige_level}
+        set {_current_index} to index of {_current_level} in {@prestige_levels}
+        
+        # Get next level info
+        if {_current_index} < size of {@prestige_levels} - 1:
+            set {_next_level} to element of {@prestige_levels} at {_current_index} + 1
+            set {_required_points} to {@prestige_requirements::%{_next_level}%}
+            set {_progress} to "&eNext Level: %{_next_level}% &7(%{player::%{_uuid}%::clickcoins}%/%{_required_points}% ClickCoins)"
+        else:
+            set {_progress} to "&eMaximum Prestige Level Reached!"
+            
+        # Get prestige rewards
+        set {_rewards} to "&6Prestige Rewards:\n"
+        loop {@prestige_rewards::%{_current_level}%}:
+            split loop-value by ":"
+            set {_type} to element 0 of loop-value
+            set {_amount} to element 1 of loop-value
+            append "&7- %{_type}%: &a%{_amount}%\n" to {_rewards}
+            
+        # Send info
+        send "{@prefix} &6Prestige Info:\n" to {_p}
+        send "{@prefix} &eCurrent Level: &a%{_current_level}%" to {_p}
+        send "{@prefix} %{_progress}%" to {_p}
+        send "{@prefix} %{_rewards}%" to {_p}
+
+# Function to view prestige leaderboard
+every 5 minutes:
+    set {_leaderboard} to "&6Prestige Leaderboard:\n"
+    set {_players::*} to all players
+
+    broadcast "{@prefix} %{_leaderboard}%" to players with permission "raceclicker.prestige.view"
+    
+    loop {_players}:
+        set {_index} to loop-index
+        if {_index} > 10:
+            break
+            
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        append "&7%{_index}%. %{_p}% &8(&6%{player::%{_uuid}%::prestige_level}%&8) &e%{player::%{_uuid}%::prestige_points}% points\n" to {_leaderboard}
+        
+    broadcast "{@prefix} %{_leaderboard}%" to players with permission "raceclicker.prestige.leaderboard"

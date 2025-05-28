@@ -1,0 +1,85 @@
+# File: player_data_reset_command.sk
+# Path: race-clicker/admin/player_data_reset_command.sk
+# Description: Admin command to reset player data for Race Clicker.
+
+options:
+    prefix: "&6&lRaceClicker &8»"
+    admin_permission: "raceclicker.admin.resetdata"
+
+# Command to reset player data
+# /rcreset <player> <data_type> [confirm]
+# data_type can be: clicks, speed_level, autoclicker_level, prestige_level, prestige_points, achievements, race_stats, all
+command /rcreset [<offlineplayer>] [<text>] [<text>]:
+    permission: {@admin_permission}
+    trigger:
+        if arg-1 is not set or arg-2 is not set:
+            send "{@prefix} &cUsage: /rcreset <player> <data_type> [confirm]"
+            send "{@prefix} &7Data types: clicks, speed, autoclicker, prestigelevel, prestigepoints, achievements, racestats, all"
+            stop
+
+        set {_target_player} to arg-1
+        set {_data_type} to lowercased arg-2
+        set {_uuid} to uuid of {_target_player}
+
+        if {_uuid} is not set:
+            send "{@prefix} &cPlayer '%arg-1%' not found or has never played."
+            stop
+
+        if arg-3 is not "confirm":
+            send "{@prefix} &eWARNING: You are about to reset %{_data_type}% data for player %name of {_target_player}%."
+            send "{@prefix} &eThis action is IRREVERSIBLE."
+            send "{@prefix} &eTo confirm, run the command again with 'confirm' at the end:"
+            send "{@prefix} &f/rcreset %name of {_target_player}% %{_data_type}% confirm"
+            stop
+
+        send "{@prefix} &7Attempting to reset %{_data_type}% data for %name of {_target_player}% (UUID: %{_uuid}%)..."
+
+        if {_data_type} is "clicks" or {_data_type} is "all":
+            delete {player::%{_uuid}%::clicks}
+            send "{@prefix} &aClicks data reset for %name of {_target_player}%."
+            if {_data_type} is not "all":
+                stop
+
+        if {_data_type} is "speed" or {_data_type} is "speed_level" or {_data_type} is "all":
+            delete {player::%{_uuid}%::speed-level} # Assuming variable name from shop.sk
+            send "{@prefix} &aSpeed level data reset for %name of {_target_player}%."
+            if {_data_type} is not "all":
+                stop
+
+        if {_data_type} is "autoclicker" or {_data_type} is "autoclicker_level" or {_data_type} is "all":
+            delete {player::%{_uuid}%::autoclicker-level} # Assuming variable name from shop.sk
+            send "{@prefix} &aAuto-clicker level data reset for %name of {_target_player}%."
+            if {_data_type} is not "all":
+                stop
+
+        if {_data_type} is "prestigelevel" or {_data_type} is "prestige_level" or {_data_type} is "all":
+            delete {player::%{_uuid}%::prestige-level} # Assuming variable name from prestige.sk
+            send "{@prefix} &aPrestige level data reset for %name of {_target_player}%."
+            if {_data_type} is not "all":
+                stop
+
+        if {_data_type} is "prestigepoints" or {_data_type} is "prestige_points" or {_data_type} is "all":
+            delete {player::%{_uuid}%::prestige-points} # Assuming variable name from prestige.sk
+            send "{@prefix} &aPrestige points data reset for %name of {_target_player}%."
+            if {_data_type} is not "all":
+                stop
+
+        if {_data_type} is "achievements" or {_data_type} is "all":
+            delete {player::%{_uuid}%::achievements::*} # Resets all unlocked achievements
+            send "{@prefix} &aAchievements data reset for %name of {_target_player}%."
+            if {_data_type} is not "all":
+                stop
+
+        if {_data_type} is "racestats" or {_data_type} is "race_stats" or {_data_type} is "all":
+            delete {player::%{_uuid}%::races_won}
+            delete {player::%{_uuid}%::total_races_participated}
+            # Add any other race-specific stats here, e.g., best times per track if stored under player UUID
+            send "{@prefix} &aRace stats (wins, participated) reset for %name of {_target_player}%."
+            if {_data_type} is not "all":
+                stop
+        
+        if {_data_type} is "all":
+            send "{@prefix} &aAll specified data categories have been reset for %name of {_target_player}%."
+        else:
+            send "{@prefix} &cUnknown data type '%{_data_type}%'. No data was reset."
+            send "{@prefix} &7Valid types: clicks, speed, autoclicker, prestigelevel, prestigepoints, achievements, racestats, all"

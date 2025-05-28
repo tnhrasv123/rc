@@ -1,0 +1,115 @@
+# File: click_accuracy.sk
+# Description: Click accuracy challenges and mini-games
+
+options:
+    prefix: &6&lRaceClicker &8»
+    accuracy_challenge_interval: 30 seconds # How often to spawn accuracy challenges
+    accuracy_target_radius: 0.5 # Radius of the target area
+    accuracy_target_duration: 5 seconds # How long the target is visible
+    accuracy_reward_multiplier: 2.0 # Multiplier for successful hits
+    accuracy_penalty_multiplier: 0.5 # Multiplier for misses
+    
+# Variables:
+# {player::%uuid%::accuracy_target_location} = location (current target location)
+# {player::%uuid%::accuracy_target_end_time} = timestamp (when target disappears)
+# {player::%uuid%::accuracy_hits} = number (successful hits)
+# {player::%uuid%::accuracy_misses} = number (misses)
+# {player::%uuid%::accuracy_streak} = number (current hit streak)
+
+# Function to spawn a new accuracy target
+function spawnAccuracyTarget(p: player):
+    set {_uuid} to {_p}'s uuid
+    
+    # Find a suitable location
+    set {_loc} to location of {_p} add vector(0, 1, 0)
+    
+    # Create target particle effect
+    loop 10 times:
+        set {_angle} to loop-number * (360 / 10)
+        set {_offset} to vector(sin({_angle}), 0, cos({_angle})) multiply {@accuracy_target_radius}
+        spawn particle "redstone" at {_loc} add {_offset}
+    
+    # Set target variables
+    set {player::%{_uuid}%::accuracy_target_location} to {_loc}
+    set {player::%{_uuid}%::accuracy_target_end_time} to now + {@accuracy_target_duration}
+    
+    # Send message
+    send "{@prefix} &aAccuracy Challenge! &eHit the target within %{@accuracy_target_duration}% seconds!" to {_p}
+
+# Function to check if click hit the target
+function checkTargetHit(p: player, click_location: location) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    
+    # Check if target exists and is still active
+    if {player::%{_uuid}%::accuracy_target_location} is not set:
+        return false
+    
+    if {player::%{_uuid}%::accuracy_target_end_time} is set and {player::%{_uuid}%::accuracy_target_end_time} < now:
+        # Target expired
+        remove target particles
+        set {player::%{_uuid}%::accuracy_target_location} to null
+        set {player::%{_uuid}%::accuracy_target_end_time} to null
+        return false
+    
+    # Calculate distance to target
+    set {_target_loc} to {player::%{_uuid}%::accuracy_target_location}
+    set {_distance} to distance between {_click_location} and {_target_loc}
+    
+    if {_distance} <= {@accuracy_target_radius}:
+        # Hit the target
+        add 1 to {player::%{_uuid}%::accuracy_hits}
+        add 1 to {player::%{_uuid}%::accuracy_streak}
+        
+        # Show hit particles
+        loop 5 times:
+            set {_angle} to loop-number * (360 / 5)
+            set {_offset} to vector(sin({_angle}), 0, cos({_angle})) multiply 0.2
+            spawn particle "happy_villager" at {_click_location} add {_offset}
+            
+        return true
+    else:
+        # Missed the target
+        add 1 to {player::%{_uuid}%::accuracy_misses}
+        set {player::%{_uuid}%::accuracy_streak} to 0
+        
+        # Show miss particles
+        spawn 5 of particle "large_smoke" at {_click_location}
+        
+        return false
+
+# Function to remove target particles
+function removeTargetParticles(p: player):
+    set {_uuid} to {_p}'s uuid
+    if {player::%{_uuid}%::accuracy_target_location} is set:
+        set {_loc} to {player::%{_uuid}%::accuracy_target_location}
+        loop 10 times:
+            set {_angle} to loop-number * (360 / 10)
+            set {_offset} to vector(sin({_angle}), 0, cos({_angle})) multiply {@accuracy_target_radius}
+            spawn particle "white_smoke" at {_loc} add {_offset}
+
+# Event handler for clicks
+every click:
+    if player has permission "raceclicker.play":
+        if {player::%player's uuid%::in_race} is true:
+            set {_hit} to checkTargetHit(player, location of player)
+            if {_hit} is true:
+                # Apply accuracy bonus
+                set {_multiplier} to {@accuracy_reward_multiplier}
+                set {player::%player's uuid%::accuracy_multiplier} to {_multiplier}
+                send "{@prefix} &aAccuracy Bonus! &e+%{_multiplier}x Power!" to player
+            else:
+                # Apply penalty
+                set {_multiplier} to {@accuracy_penalty_multiplier}
+                set {player::%player's uuid%::accuracy_multiplier} to {_multiplier}
+                send "{@prefix} &cAccuracy Miss! &e-%{_multiplier}x Power!" to player
+
+# Periodically spawn new targets
+every {@accuracy_challenge_interval}:
+    loop all players:
+        if {player::%loop-player's uuid%::in_race} is true:
+            spawnAccuracyTarget(loop-player)
+
+# Function to get current accuracy multiplier
+function getCurrentAccuracyMultiplier(p: player) :: number:
+    set {_uuid} to {_p}'s uuid
+    return {player::%{_uuid}%::accuracy_multiplier} ? 1

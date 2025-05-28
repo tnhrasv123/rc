@@ -1,0 +1,83 @@
+# File: anti_spam.sk
+# Description: Anti-spam system to prevent click abuse and ensure fair gameplay
+
+options:
+    prefix: &6&lRaceClicker &8»
+    max_clicks_per_second: 20 # Maximum allowed clicks per second
+    spam_detection_window: 5 ticks # Window size for spam detection
+    spam_penalty_duration: 10 seconds # Duration of penalty when spam is detected
+    spam_penalty_effect: "slowness" # Effect to apply as penalty
+    spam_penalty_level: 2 # Level of penalty effect
+    spam_penalty_message: "&cClick spam detected! You've been slowed down for %duration% seconds."
+    
+# Variables:
+# {player::%uuid%::clicks_in_window} = number (clicks in current window)
+# {player::%uuid%::last_click_time} = timestamp (last click time)
+# {player::%uuid%::spam_penalty_end_time} = timestamp (when penalty ends)
+
+# Function to check if a click is spam
+function isSpamClick(p: player) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    
+    # Check if player is under penalty
+    if {player::%{_uuid}%::spam_penalty_end_time} is set and {player::%{_uuid}%::spam_penalty_end_time} > now:
+        return true
+    
+    # Check click rate
+    if {player::%{_uuid}%::last_click_time} is set:
+        set {_time_diff} to now - {player::%{_uuid}%::last_click_time}
+        if {_time_diff} < 1 second:
+            add 1 to {player::%{_uuid}%::clicks_in_window}
+            
+            # Check if exceeded limit
+            if {player::%{_uuid}%::clicks_in_window} >= {@max_clicks_per_second}:
+                return true
+        else:
+            # Reset window if too much time passed
+            set {player::%{_uuid}%::clicks_in_window} to 1
+    else:
+        set {player::%{_uuid}%::clicks_in_window} to 1
+    
+    set {player::%{_uuid}%::last_click_time} to now
+    return false
+
+# Function to apply spam penalty
+function applySpamPenalty(p: player):
+    set {_uuid} to {_p}'s uuid
+    
+    # Apply penalty effect
+    apply {@spam_penalty_effect} of tier {@spam_penalty_level} to {_p} for {@spam_penalty_duration}
+    
+    # Set penalty end time
+    set {player::%{_uuid}%::spam_penalty_end_time} to now + {@spam_penalty_duration}
+    
+    # Send message with duration in seconds
+    set {_duration_seconds} to floor({@spam_penalty_duration} / 20)
+    send "{@prefix} %{@spam_penalty_message}%" to {_p} with arguments {_duration_seconds}
+    
+    # Play warning sound
+    play sound "minecraft:entity.villager.no" to {_p} with volume 1 pitch 1.5
+
+# Event handler for all clicks
+on click:
+    if player has permission "raceclicker.play":
+        if isSpamClick(player):
+            applySpamPenalty(player)
+            stop
+        
+        # If not spam, proceed with click
+        trigger:
+            # Continue with normal click handling
+            pass
+
+# Function to check if player is under penalty
+function isUnderPenalty(p: player) :: boolean:
+    set {_uuid} to {_p}'s uuid
+    return {player::%{_uuid}%::spam_penalty_end_time} is set and {player::%{_uuid}%::spam_penalty_end_time} > now
+
+# Function to get remaining penalty time
+function getPenaltyTimeRemaining(p: player) :: timespan:
+    set {_uuid} to {_p}'s uuid
+    if {player::%{_uuid}%::spam_penalty_end_time} is set:
+        return {player::%{_uuid}%::spam_penalty_end_time} - now
+    return 0 seconds

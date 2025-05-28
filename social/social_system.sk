@@ -1,0 +1,226 @@
+# File: social_system.sk
+# Description: Social system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Social settings
+    max_friends: 100 # Maximum friends per player
+    max_party_size: 8 # Maximum party size
+    friend_request_cooldown: 5 minutes # Cooldown between friend requests
+    
+    # Party settings
+    party_leader_prefix: "&6[Party Leader] " # Party leader prefix
+    party_member_prefix: "&e[Party Member] " # Party member prefix
+    
+    # Chat settings
+    chat_color: "&7" # Default chat color
+    team_chat_color: "&a" # Team chat color
+    
+# Variables:
+# {player::%uuid%::friends::*} = text (list of friends)
+# {player::%uuid%::party} = text (party name)
+# {player::%uuid%::party_role} = text (party role)
+# {player::%uuid%::last_friend_request} = timestamp (last friend request time)
+# {player::%uuid%::last_party_invite} = timestamp (last party invite time)
+
+# Function to add friend
+function addFriend(p: player, target: player):
+    set {_uuid} to {_p}'s uuid
+    set {_target_uuid} to {_target}'s uuid
+    
+    # Check friend limit
+    if size of {player::%{_uuid}%::friends::*} >= {@max_friends}:
+        send "{@prefix} &cYou've reached your friend limit!" to {_p}
+        return
+    
+    # Add friend
+    add {_target}'s name to {player::%{_uuid}%::friends::*}
+    add {_p}'s name to {player::%{_target_uuid}%::friends::*}
+    
+    # Send messages
+    send "{@prefix} &aYou're now friends with %{_target}%!" to {_p}
+    send "{@prefix} &a%{_p}% is now your friend!" to {_target}
+
+# Function to remove friend
+function removeFriend(p: player, target: player):
+    set {_uuid} to {_p}'s uuid
+    set {_target_uuid} to {_target}'s uuid
+    
+    # Remove friend
+    remove {_target}'s name from {player::%{_uuid}%::friends::*}
+    remove {_p}'s name from {player::%{_target_uuid}%::friends::*}
+    
+    # Send messages
+    send "{@prefix} &cYou're no longer friends with %{_target}%!" to {_p}
+    send "{@prefix} &c%{_p}% is no longer your friend!" to {_target}
+
+# Function to create party
+function createParty(p: player, name: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Check if already in party
+    if {player::%{_uuid}%::party} is set:
+        send "{@prefix} &cYou're already in a party!" to {_p}
+        return
+    
+    # Create party
+    set {player::%{_uuid}%::party} to {_name}
+    set {player::%{_uuid}%::party_role} to "leader"
+    set {party::%{_name}%::leader} to {_p}
+    set {party::%{_name}%::members::*} to {_p}'s name
+    
+    # Send message
+    send "{@prefix} &aCreated party: %{_name}%" to {_p}
+    broadcast "{@prefix} &6%{_p}% created party: %{_name}%" to players with permission "raceclicker.party"
+
+# Function to join party
+function joinParty(p: player, name: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Check if party exists
+    if {party::%{_name}%::leader} is not set:
+        send "{@prefix} &cParty not found!" to {_p}
+        return
+    
+    # Check party size
+    if size of {party::%{_name}%::members::*} >= {@max_party_size}:
+        send "{@prefix} &cParty is full!" to {_p}
+        return
+    
+    # Join party
+    set {player::%{_uuid}%::party} to {_name}
+    set {player::%{_uuid}%::party_role} to "member"
+    add {_p}'s name to {party::%{_name}%::members::*}
+    
+    # Send message
+    send "{@prefix} &aJoined party: %{_name}%" to {_p}
+    broadcast "{@prefix} &6%{_p}% joined party: %{_name}%" to players with permission "raceclicker.party"
+
+# Function to leave party
+function leaveParty(p: player):
+    set {_uuid} to {_p}'s uuid
+    set {_party} to {player::%{_uuid}%::party}
+    
+    # Check if in party
+    if {_party} is not set:
+        send "{@prefix} &cYou're not in a party!" to {_p}
+        return
+    
+    # Remove from party
+    remove {_p}'s name from {party::%{_party}%::members::*}
+    delete {player::%{_uuid}%::party}
+    delete {player::%{_uuid}%::party_role}
+    
+    # If leader, transfer leadership or disband
+    if {player::%{_uuid}%::party_role} is "leader":
+        if size of {party::%{_party}%::members::*} > 0:
+            set {_new_leader} to first value of {party::%{_party}%::members::*}
+            set {party::%{_party}%::leader} to {_new_leader}
+            send "{@prefix} &6Leadership transferred to %{_new_leader}%" to {_new_leader}
+        else:
+            delete {party::%{_party}%::*}
+    
+    # Send message
+    send "{@prefix} &aLeft party: %{_party}%" to {_p}
+    broadcast "{@prefix} &6%{_p}% left party: %{_party}%" to players with permission "raceclicker.party"
+
+# Function to send friend request
+function sendFriendRequest(p: player, target: player):
+    set {_uuid} to {_p}'s uuid
+    set {_target_uuid} to {_target}'s uuid
+    
+    # Check cooldown
+    if now - {player::%{_uuid}%::last_friend_request} < {@friend_request_cooldown}:
+        send "{@prefix} &cPlease wait before sending another friend request!" to {_p}
+        return
+    
+    # Send request
+    send "{@prefix} &6%{_p}% wants to be friends! Use /accept %{_p}% to accept." to {_target}
+    set {player::%{_uuid}%::last_friend_request} to now
+    
+    # Send confirmation
+    send "{@prefix} &aFriend request sent to %{_target}%!" to {_p}
+
+# Function to accept friend request
+function acceptFriendRequest(p: player, target: player):
+    set {_uuid} to {_p}'s uuid
+    
+    # Add friend
+    addFriend({_p}, {_target})
+
+# Chat system
+on chat:
+    set {_p} to sender
+    set {_uuid} to {_p}'s uuid
+    
+    # Check party chat
+    if message starts with "!":
+        if {player::%{_uuid}%::party} is set:
+            set {_party} to {player::%{_uuid}%::party}
+            set {_message} to message without "!"
+            
+            # Send to party members
+            loop {party::%{_party}%::members::*}:
+                set {_member} to player from name loop-value
+                if {_member} is not null:
+                    send "&6[Party] %{party_member_prefix}%%{_p}%: %{_message}%" to {_member}
+            
+            # Cancel normal chat
+            cancel event
+            return
+    
+    # Normal chat
+    send "&6[Global] %{chat_color}%%{_p}%: %{message}%" to all players
+
+# Social commands
+command /friend <player>:
+    trigger:
+        sendFriendRequest(player, arg-1)
+
+command /accept <player>:
+    trigger:
+        acceptFriendRequest(player, arg-1)
+
+command /party create <text>:
+    permission: raceclicker.party
+    trigger:
+        createParty(player, arg-1)
+
+command /party join <text>:
+    permission: raceclicker.party
+    trigger:
+        joinParty(player, arg-1)
+
+command /party leave:
+    permission: raceclicker.party
+    trigger:
+        leaveParty(player)
+
+command /friends:
+    trigger:
+        set {_uuid} to player's uuid
+        if {player::%{_uuid}%::friends::*} is not set:
+            send "{@prefix} &cYou have no friends!" to player
+            return
+        
+        send "{@prefix} &6Your Friends:" to player
+        loop {player::%{_uuid}%::friends::*}:
+            send "&e- %{loop-value}%" to player
+
+command /partyinfo:
+    permission: raceclicker.party
+    trigger:
+        set {_uuid} to player's uuid
+        set {_party} to {player::%{_uuid}%::party}
+        
+        if {_party} is not set:
+            send "{@prefix} &cYou're not in a party!" to player
+            return
+        
+        send "{@prefix} &6Party Info - %{_party}%" to player
+        send "&eLeader: &a%{party::%{_party}%::leader}%" to player
+        send "&eMembers: &a%{size of {party::%{_party}%::members::*}}%/%{@max_party_size}%" to player
+        
+        send "&eMembers:" to player
+        loop {party::%{_party}%::members::*}:
+            send "&7- %{loop-value}%" to player

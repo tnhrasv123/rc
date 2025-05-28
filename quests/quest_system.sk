@@ -1,0 +1,410 @@
+# File: quest_system.sk
+# Description: Quest system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Quest settings
+    daily_quest_reset: 00:00 # Daily quest reset time
+    weekly_quest_reset: monday 00:00 # Weekly quest reset time
+    
+    # Quest types
+    quest_types:
+        - "Click Challenge"
+        - "Race Challenge"
+        - "Track Challenge"
+        - "Achievement Challenge"
+        - "Social Challenge"
+        - "Event Challenge"
+        - "Combo Challenge"
+        - "Speed Challenge"
+        - "Power Challenge"
+    
+    # Quest rewards
+    quest_rewards:
+        daily: 1000
+        weekly: 2000
+        monthly: 5000
+        special: 10000
+    
+    # Quest difficulties
+    quest_difficulties:
+        easy: 1
+        medium: 2
+        hard: 3
+        expert: 4
+        master: 5
+
+# Variables:
+# {player::%uuid%::quests::*} = text (active quests)
+# {player::%uuid%::quest_progress::*} = number (quest progress)
+# {player::%uuid%::completed_quests::*} = text (completed quests)
+# {quest::%id%::type} = text (quest type)
+# {quest::%id%::target} = number (quest target)
+# {quest::%id%::reward} = number (quest reward)
+# {quest::%id%::difficulty} = number (quest difficulty)
+# {quest::%id%::description} = text (quest description)
+
+# Function to generate daily quests
+every day at {@daily_quest_reset}:
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        
+        # Clear old quests
+        clearQuests({_p})
+        
+        # Generate new quests
+        generateQuests({_p}, 3)
+
+# Function to generate weekly quests
+every week at {@weekly_quest_reset}:
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        
+        # Clear old quests
+        clearQuests({_p})
+        
+        # Generate new quests
+        generateQuests({_p}, 5)
+
+# Function to clear quests
+function clearQuests(p: player):
+    set {_uuid} to {_p}'s uuid
+    
+    # Clear active quests
+    delete {player::%{_uuid}%::quests::*}
+    delete {player::%{_uuid}%::quest_progress::*}
+    
+    # Archive completed quests
+    loop {player::%{_uuid}%::completed_quests::*}:
+        add loop-value to {player::%{_uuid}%::quest_history::*}
+    
+    # Clear completed quests
+    delete {player::%{_uuid}%::completed_quests::*}
+
+# Function to generate quests
+function generateQuests(p: player, count: number):
+    set {_uuid} to {_p}'s uuid
+    
+    # Generate quests
+    loop count times:
+        set {_quest_id} to "quest_%{_uuid}%_%{loop-index}%"
+        
+        # Choose random quest type
+        set {_type} to random element of {@quest_types::*}
+        
+        # Set quest parameters
+        switch {_type}:
+            case "Click Challenge":
+                set {_target} to random number between 1000 and 5000
+                set {_reward} to random number between 100 and 500
+                set {_difficulty} to random number between 1 and 3
+                set {_description} to "Click %{_target}% times"
+                break
+            case "Race Challenge":
+                set {_target} to random number between 3 and 10
+                set {_reward} to random number between 200 and 800
+                set {_difficulty} to random number between 2 and 4
+                set {_description} to "Win %{_target}% races"
+                break
+            case "Track Challenge":
+                set {_target} to random number between 5 and 15
+                set {_reward} to random number between 150 and 600
+                set {_difficulty} to random number between 2 and 4
+                set {_description} to "Complete %{_target}% tracks"
+                break
+            case "Achievement Challenge":
+                set {_target} to random number between 1 and 5
+                set {_reward} to random number between 100 and 300
+                set {_difficulty} to random number between 2 and 4
+                set {_description} to "Unlock %{_target}% achievements"
+                break
+            case "Social Challenge":
+                set {_target} to random number between 5 and 20
+                set {_reward} to random number between 50 and 200
+                set {_difficulty} to random number between 1 and 3
+                set {_description} to "Make %{_target}% friends"
+                break
+            case "Event Challenge":
+                set {_target} to random number between 1 and 3
+                set {_reward} to random number between 200 and 500
+                set {_difficulty} to random number between 2 and 4
+                set {_description} to "Complete %{_target}% events"
+                break
+            case "Combo Challenge":
+                set {_target} to random number between 50 and 200
+                set {_reward} to random number between 100 and 400
+                set {_difficulty} to random number between 2 and 4
+                set {_description} to "Achieve %{_target}% combo"
+                break
+            case "Speed Challenge":
+                set {_target} to random number between 100 and 500
+                set {_reward} to random number between 150 and 600
+                set {_difficulty} to random number between 2 and 4
+                set {_description} to "Reach %{_target}% speed"
+                break
+            case "Power Challenge":
+                set {_target} to random number between 50 and 200
+                set {_reward} to random number between 100 and 400
+                set {_difficulty} to random number between 2 and 4
+                set {_description} to "Achieve %{_target}% power"
+                break
+        
+        # Store quest data
+        set {quest::%{_quest_id}%::type} to {_type}
+        set {quest::%{_quest_id}%::target} to {_target}
+        set {quest::%{_quest_id}%::reward} to {_reward}
+        set {quest::%{_quest_id}%::difficulty} to {_difficulty}
+        set {quest::%{_quest_id}%::description} to {_description}
+        add {_quest_id} to {player::%{_uuid}%::quests::*}
+        set {player::%{_uuid}%::quest_progress::%{_quest_id}%} to 0
+    
+    # Send quest notification
+    send "{@prefix} &aNew quests generated! Check your quest log!" to {_p}
+
+# Function to check quest progress
+every 1 tick:
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        
+        # Check all quests
+        loop {player::%{_uuid}%::quests::*}:
+            set {_quest_id} to loop-value
+            set {_type} to {quest::%{_quest_id}%::type}
+            
+            # Check progress based on quest type
+            switch {_type}:
+                case "Click Challenge":
+                    add {player::%{_uuid}%::clicks} to {player::%{_uuid}%::quest_progress::%{_quest_id}%}
+                    break
+                case "Race Challenge":
+                    add {player::%{_uuid}%::races_won} to {player::%{_uuid}%::quest_progress::%{_quest_id}%}
+                    break
+                case "Track Challenge":
+                    add {player::%{_uuid}%::tracks_completed} to {player::%{_uuid}%::quest_progress::%{_quest_id}%}
+                    break
+                case "Achievement Challenge":
+                    add {player::%{_uuid}%::achievements_unlocked} to {player::%{_uuid}%::quest_progress::%{_quest_id}%}
+                    break
+                case "Social Challenge":
+                    add {player::%{_uuid}%::friends_added} to {player::%{_uuid}%::quest_progress::%{_quest_id}%}
+                    break
+                case "Event Challenge":
+                    add {player::%{_uuid}%::events_completed} to {player::%{_uuid}%::quest_progress::%{_quest_id}%}
+                    break
+                case "Combo Challenge":
+                    if {player::%{_uuid}%::max_combo} >= {quest::%{_quest_id}%::target}:
+                        set {player::%{_uuid}%::quest_progress::%{_quest_id}%} to {quest::%{_quest_id}%::target}
+                    break
+                case "Speed Challenge":
+                    if {player::%{_uuid}%::speed} >= {quest::%{_quest_id}%::target}:
+                        set {player::%{_uuid}%::quest_progress::%{_quest_id}%} to {quest::%{_quest_id}%::target}
+                    break
+                case "Power Challenge":
+                    if {player::%{_uuid}%::power} >= {quest::%{_quest_id}%::target}:
+                        set {player::%{_uuid}%::quest_progress::%{_quest_id}%} to {quest::%{_quest_id}%::target}
+                    break
+            
+            # Check if quest is complete
+            if {player::%{_uuid}%::quest_progress::%{_quest_id}%} >= {quest::%{_quest_id}%::target}:
+                completeQuest({_p}, {_quest_id})
+
+# Function to complete quest
+function completeQuest(p: player, quest_id: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Give quest reward
+    add {quest::%{quest_id}%::reward} to {player::%{_uuid}%::clickcoins}
+    
+    # Add quest to completed
+    add quest_id to {player::%{_uuid}%::completed_quests::*}
+    
+    # Remove quest
+    remove quest_id from {player::%{_uuid}%::quests::*}
+    delete {player::%{_uuid}%::quest_progress::%{quest_id}%}
+    
+    # Send completion message
+    send "{@prefix} &aCompleted quest: %{quest::%{quest_id}%::description}%" to {_p}
+    send "{@prefix} &aReward: %{quest::%{quest_id}%::reward}% ClickCoins!" to {_p}
+    
+    # Check quest achievements
+    checkQuestAchievements({_p})
+
+# Function to check quest achievements
+function checkQuestAchievements(p: player):
+    set {_uuid} to {_p}'s uuid
+    set {_completed} to size of {player::%{_uuid}%::completed_quests::*}
+    
+    # Quest completion achievements
+    loop [10, 50, 100, 200, 500]:
+        if {_completed} >= loop-value:
+            if {player::%{_uuid}%::achievements::quests_%{loop-value}%} is not true:
+                unlockAchievement({_p}, "Quest Master %{loop-value}%")
+
+# Function to get quest status
+function getQuestStatus(p: player) :: text:
+    set {_uuid} to {_p}'s uuid
+    set {_status} to "&6Quest Status:\n"
+    
+    # Active quests
+    if {player::%{_uuid}%::quests::*} is not empty:
+        append "&eActive Quests:\n" to {_status}
+        loop {player::%{_uuid}%::quests::*}:
+            set {_quest_id} to loop-value
+            set {_progress} to {player::%{_uuid}%::quest_progress::%{_quest_id}%}
+            set {_target} to {quest::%{_quest_id}%::target}
+            set {_reward} to {quest::%{_quest_id}%::reward}
+            set {_description} to {quest::%{_quest_id}%::description}
+            append "&7- %{_description}%: &a%{_progress}%/%{_target}% &e(Reward: %{_reward}% ClickCoins)\n" to {_status}
+    else:
+        append "&cNo active quests!" to {_status}
+    
+    # Completed quests
+    if {player::%{_uuid}%::completed_quests::*} is not empty:
+        append "&eCompleted Quests:\n" to {_status}
+        loop {player::%{_uuid}%::completed_quests::*}:
+            set {_quest_id} to loop-value
+            set {_description} to {quest::%{_quest_id}%::description}
+            append "&7- %{_description}%\n" to {_status}
+    
+    return {_status}
+
+# Command to view quests
+command /quests:
+    trigger:
+        send "{@prefix} %{getQuestStatus(player)}%" to player
+
+# Command to view quest rewards
+command /questrewards:
+    trigger:
+        send "{@prefix} &6Quest Rewards:\n" to player
+        send "&eDaily Quests: &a%{@quest_rewards::daily}% ClickCoins" to player
+        send "&eWeekly Quests: &a%{@quest_rewards::weekly}% ClickCoins" to player
+        send "&eMonthly Quests: &a%{@quest_rewards::monthly}% ClickCoins" to player
+        send "&eSpecial Quests: &a%{@quest_rewards::special}% ClickCoins" to player
+
+# Command to view quest history
+command /questhistory:
+    trigger:
+        set {_uuid} to player's uuid
+        if {player::%{_uuid}%::quest_history::*} is not empty:
+            send "{@prefix} &6Quest History:\n" to player
+            loop {player::%{_uuid}%::quest_history::*}:
+                set {_quest_id} to loop-value
+                set {_description} to {quest::%{_quest_id}%::description}
+                send "&7- %{_description}%" to player
+        else:
+            send "{@prefix} &cNo quest history!" to player
+
+# Special event quests
+on event start:
+    set {_event} to event::current_event
+    set {_quest_id} to "event_quest_%{_event}%"
+    
+    # Generate event quest
+    set {quest::%{_quest_id}%::type} to "Event Challenge"
+    set {quest::%{_quest_id}%::target} to 1
+    set {quest::%{_quest_id}%::reward} to {@quest_rewards::special}
+    set {quest::%{_quest_id}%::difficulty} to 5
+    set {quest::%{_quest_id}%::description} to "Complete the %{_event}% event"
+    
+    # Give quest to all players
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        add {_quest_id} to {player::%{_uuid}%::quests::*}
+        set {player::%{_uuid}%::quest_progress::%{_quest_id}%} to 0
+        send "{@prefix} &aNew event quest available! Check your quest log!" to {_p}
+
+# Achievement quests
+on achievement unlock:
+    set {_p} to player
+    set {_uuid} to {_p}'s uuid
+    
+    # Check achievement quest
+    if {player::%{_uuid}%::achievements_unlocked} >= 5:
+        set {_quest_id} to "achievement_quest"
+        
+        # Generate achievement quest
+        set {quest::%{_quest_id}%::type} to "Achievement Challenge"
+        set {quest::%{_quest_id}%::target} to 5
+        set {quest::%{_quest_id}%::reward} to {@quest_rewards::special}
+        set {quest::%{_quest_id}%::difficulty} to 4
+        set {quest::%{_quest_id}%::description} to "Unlock 5 achievements"
+        
+        # Give quest if not already completed
+        if {_quest_id} is not in {player::%{_uuid}%::completed_quests::*}:
+            add {_quest_id} to {player::%{_uuid}%::quests::*}
+            set {player::%{_uuid}%::quest_progress::%{_quest_id}%} to 5
+            completeQuest({_p}, {_quest_id})
+
+# Social quests
+on friend request accept:
+    set {_p} to player
+    set {_uuid} to {_p}'s uuid
+    
+    # Check social quest
+    if {player::%{_uuid}%::friends_added} >= 5:
+        set {_quest_id} to "social_quest"
+        
+        # Generate social quest
+        set {quest::%{_quest_id}%::type} to "Social Challenge"
+        set {quest::%{_quest_id}%::target} to 5
+        set {quest::%{_quest_id}%::reward} to {@quest_rewards::special}
+        set {quest::%{_quest_id}%::difficulty} to 3
+        set {quest::%{_quest_id}%::description} to "Make 5 friends"
+        
+        # Give quest if not already completed
+        if {_quest_id} is not in {player::%{_uuid}%::completed_quests::*}:
+            add {_quest_id} to {player::%{_uuid}%::quests::*}
+            set {player::%{_uuid}%::quest_progress::%{_quest_id}%} to 5
+            completeQuest({_p}, {_quest_id})
+
+# Quest completion achievements
+on quest complete:
+    set {_p} to player
+    set {_uuid} to {_p}'s uuid
+    
+    # Check quest completion achievements
+    set {_completed} to size of {player::%{_uuid}%::completed_quests::*}
+    loop [10, 50, 100, 200, 500]:
+        if {_completed} >= loop-value:
+            if {player::%{_uuid}%::achievements::quests_%{loop-value}%} is not true:
+                unlockAchievement({_p}, "Quest Master %{loop-value}%")
+
+# Function to unlock achievement
+function unlockAchievement(p: player, achievement: text):
+    set {_uuid} to {_p}'s uuid
+    set {player::%{_uuid}%::achievements::%{achievement.lower}%} to true
+    
+    # Give achievement reward
+    giveAchievementReward({_p}, achievement)
+    
+    # Send achievement message
+    send "{@prefix} &aUnlocked Achievement: %{achievement}%" to {_p}
+    broadcast "{@prefix} &6%{_p}% unlocked achievement: %{achievement}%" to players with permission "raceclicker.achievements"
+
+# Function to give achievement reward
+function giveAchievementReward(p: player, achievement: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Base reward
+    set {_reward} to 100
+    
+    # Special rewards
+    switch achievement:
+        case "Quest Master 500":
+            set {_reward} to 500
+            break
+        case "Quest Master 200":
+            set {_reward} to 300
+            break
+        case "Quest Master 100":
+            set {_reward} to 200
+            break
+    
+    # Add reward
+    add {_reward} to {player::%{_uuid}%::clickcoins}
+    send "{@prefix} &aEarned %{@achievement_bonus}% ClickCoins for achievement!" to {_p}

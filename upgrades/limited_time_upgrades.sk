@@ -1,0 +1,141 @@
+# File: limited_time_upgrades.sk
+# Description: Limited-time upgrade system with special power-ups
+
+options:
+    prefix: &6&lRaceClicker &8»
+    upgrade_spawn_interval: 30 seconds # How often to spawn upgrades
+    upgrade_duration: 15 seconds # Duration of upgrade effects
+    upgrade_radius: 2 blocks # Radius around upgrade
+    upgrade_types: "speed,combo,accuracy,click_power" # Available upgrade types
+    
+# Variables:
+# {upgrade::%id%::location} = location (upgrade location)
+# {upgrade::%id%::type} = text (upgrade type)
+# {upgrade::%id%::end_time} = timestamp (when upgrade expires)
+# {player::%uuid%::active_upgrades::*} = text (list of active upgrades)
+
+# Function to spawn a new upgrade
+function spawnUpgrade(location: location) :: text:
+    set {_id} to "upgrade_%{now}%"
+    
+    # Choose random upgrade type
+    set {_type} to choose from {@upgrade_types}
+    
+    # Set upgrade variables
+    set {upgrade::%{_id}%::location} to {_location}
+    set {upgrade::%{_id}%::type} to {_type}
+    set {upgrade::%{_id}%::end_time} to now + {@upgrade_duration}
+    
+    # Create upgrade particle effect
+    loop 10 times:
+        set {_angle} to loop-number * (360 / 10)
+        set {_offset} to vector(sin({_angle}), 0, cos({_angle})) multiply {@upgrade_radius}
+        
+        if {_type} is "speed":
+            spawn particle "speed" at {_location} add {_offset}
+        else if {_type} is "combo":
+            spawn particle "crit" at {_location} add {_offset}
+        else if {_type} is "accuracy":
+            spawn particle "redstone" at {_location} add {_offset}
+        else if {_type} is "click_power":
+            spawn particle "happy_villager" at {_location} add {_offset}
+    
+    return {_id}
+
+# Function to apply upgrade effects
+function applyUpgrade(p: player, upgrade_id: text):
+    set {_uuid} to {_p}'s uuid
+    set {_type} to {upgrade::%{_upgrade_id}%::type}
+    
+    # Add to active upgrades list
+    add {_type} to {player::%{_uuid}%::active_upgrades::*}
+    
+    # Apply effects based on type
+    if {_type} is "speed":
+        # Increase speed level temporarily
+        set {_speed_bonus} to 5
+        set {player::%{_uuid}%::speed_bonus} to {_speed_bonus}
+        send "{@prefix} &aSpeed Boost! &e+%{_speed_bonus}% speed for %{@upgrade_duration}% seconds!" to {_p}
+    else if {_type} is "combo":
+        # Increase combo multiplier
+        set {_combo_bonus} to 1.5
+        set {player::%{_uuid}%::combo_bonus} to {_combo_bonus}
+        send "{@prefix} &aCombo Boost! &e+%{_combo_bonus}x combo multiplier for %{@upgrade_duration}% seconds!" to {_p}
+    else if {_type} is "accuracy":
+        # Increase accuracy chance
+        set {_accuracy_bonus} to 0.3
+        set {player::%{_uuid}%::accuracy_bonus} to {_accuracy_bonus}
+        send "{@prefix} &aAccuracy Boost! &e+%{_accuracy_bonus}x accuracy for %{@upgrade_duration}% seconds!" to {_p}
+    else if {_type} is "click_power":
+        # Increase click power
+        set {_power_bonus} to 2.0
+        set {player::%{_uuid}%::power_bonus} to {_power_bonus}
+        send "{@prefix} &aPower Boost! &e+%{_power_bonus}x click power for %{@upgrade_duration}% seconds!" to {_p}
+    
+    # Play sound
+    play sound "minecraft:entity.experience_orb.pickup" to {_p} with volume 1 pitch 1.2
+
+# Function to remove upgrade effects
+function removeUpgrade(p: player, upgrade_type: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Remove from active upgrades
+    remove {_upgrade_type} from {player::%{_uuid}%::active_upgrades::*}
+    
+    # Remove effects
+    if {_upgrade_type} is "speed":
+        set {player::%{_uuid}%::speed_bonus} to 0
+    else if {_upgrade_type} is "combo":
+        set {player::%{_uuid}%::combo_bonus} to 1
+    else if {_upgrade_type} is "accuracy":
+        set {player::%{_uuid}%::accuracy_bonus} to 1
+    else if {_upgrade_type} is "click_power":
+        set {player::%{_uuid}%::power_bonus} to 1
+    
+    send "{@prefix} &cUpgrade effect expired!" to {_p}
+
+# Event handler for upgrade collection
+every 1 tick:
+    loop all players:
+        if {player::%loop-player's uuid%::in_race} is true:
+            # Check for nearby upgrades
+            loop all keys of {upgrade::%*%::location}:
+                set {_id} to loop-value
+                set {_upgrade_loc} to {upgrade::%{_id}%::location}
+                set {_player_loc} to location of loop-player
+                
+                # Check if upgrade is still valid
+                if {upgrade::%{_id}%::end_time} is set and {upgrade::%{_id}%::end_time} < now:
+                    # Upgrade expired, remove it
+                    remove {_id} from {upgrade::%*%::location}
+                    remove {_id} from {upgrade::%*%::type}
+                    remove {_id} from {upgrade::%*%::end_time}
+                    continue
+                
+                # Check if player is close enough
+                if distance between {_player_loc} and {_upgrade_loc} <= {@upgrade_radius}:
+                    applyUpgrade(loop-player, {_id})
+                    remove {_id} from {upgrade::%*%::location}
+                    remove {_id} from {upgrade::%*%::type}
+                    remove {_id} from {upgrade::%*%::end_time}
+
+# Periodically spawn upgrades
+every {@upgrade_spawn_interval}:
+    loop all players:
+        if {player::%loop-player's uuid%::in_race} is true:
+            set {_loc} to location of loop-player add vector(0, 1, 0)
+            spawnUpgrade({_loc})
+
+# Function to get upgrade bonus for click power calculation
+function getUpgradeBonus(p: player, upgrade_type: text) :: number:
+    set {_uuid} to {_p}'s uuid
+    
+    if {_upgrade_type} is "speed":
+        return {player::%{_uuid}%::speed_bonus} ? 0
+    else if {_upgrade_type} is "combo":
+        return {player::%{_uuid}%::combo_bonus} ? 1
+    else if {_upgrade_type} is "accuracy":
+        return {player::%{_uuid}%::accuracy_bonus} ? 1
+    else if {_upgrade_type} is "power":
+        return {player::%{_uuid}%::power_bonus} ? 1
+    return 1

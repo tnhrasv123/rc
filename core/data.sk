@@ -1,0 +1,238 @@
+# File: data.sk
+# Path: race-clicker/core/data.sk
+# Description: Player data management, initialization, and access functions.
+
+options:
+    prefix: "&6&lRaceClicker &8»&7"
+    # Skript handles variable persistence automatically in variables.csv (by default).
+    # For larger scale or more complex data, external files (YAML/JSON/DB) would be better,
+    # but for this project, we'll rely on Skript's native persistence for simplicity.
+
+# --- Standard Player Variables --- #
+# {player::%UUID%::name} - Player's last known name (for display)
+# {player::%UUID%::clicks} - Total clicks/currency
+# {player::%UUID%::speed-level} - Current speed upgrade level
+# {player::%UUID%::autoclicker-level} - Current auto-clicker upgrade level
+# {player::%UUID%::prestige-level} - Current prestige level
+# {player::%UUID%::prestige-points} - Currency for prestige shop
+
+# --- Statistics Variables --- #
+# {player::%UUID%::stats::races_won} - Number of races won
+# {player::%UUID%::stats::races_participated} - Total races participated in
+# {player::%UUID%::stats::total_clicks_manual} - Total manual clicks made
+# {player::%UUID%::stats::total_clicks_autoclicker} - Total auto-clicks generated
+# {player::%UUID%::stats::best_times::%track_id%} - Best time for a specific track (timespan)
+# {player::%UUID%::stats::join_date} - Timestamp of first join
+# {player::%UUID%::stats::last_seen_date} - Timestamp of last quit
+
+# --- Achievement Variables --- #
+# {player::%UUID%::achievements::%achievement_id%::unlocked} - Boolean, true if unlocked
+# {player::%UUID%::achievements::%achievement_id%::progress} - Current progress if applicable
+# {player::%UUID%::achievements::%achievement_id%::unlock_date} - Timestamp of unlock
+
+# --- Race-Specific Variables (Often temporary or session-based, but some might persist) --- #
+# {player::%UUID%::in_race} - Boolean, true if currently in a race (managed by racing.sk)
+# {player::%UUID%::current_track_id} - ID of the track (managed by racing.sk)
+# {player::%UUID%::race_progress_current_race} - Progress in current race (managed by racing.sk/clicking.sk)
+# {player::%UUID%::race_citizen_entity_id} - UUID of the citizen entity (managed by citizens.sk/racing.sk)
+# {player::%UUID%::race_start_time_personal} - Timestamp for personal race duration (managed by racing.sk)
+
+# --- Cached/Calculated Variables (Non-persistent, recalculated as needed) --- #
+# {cache::%UUID%::effective_click_power} - Calculated click power including bonuses
+# {cache::%UUID%::next_combo_reset_time} - Timestamp for combo system
+# {cache::%UUID%::current_combo_multiplier} - Current combo multiplier
+
+# --- Data Initialization and Management --- #
+
+on join:
+    set {_uuid} to player's uuid
+    # Store/update player name
+    set {player::%{_uuid}%::name} to player's name
+
+    # Initialize core currency and upgrade levels
+    if {player::%{_uuid}%::clicks} is not set:
+        set {player::%{_uuid}%::clicks} to 0
+    if {player::%{_uuid}%::speed-level} is not set:
+        set {player::%{_uuid}%::speed-level} to 1
+    if {player::%{_uuid}%::autoclicker-level} is not set:
+        set {player::%{_uuid}%::autoclicker-level} to 0
+    if {player::%{_uuid}%::prestige-level} is not set:
+        set {player::%{_uuid}%::prestige-level} to 0
+    if {player::%{_uuid}%::prestige-points} is not set:
+        set {player::%{_uuid}%::prestige-points} to 0
+
+    # Initialize statistics
+    if {player::%{_uuid}%::stats::races_won} is not set:
+        set {player::%{_uuid}%::stats::races_won} to 0
+    if {player::%{_uuid}%::stats::races_participated} is not set:
+        set {player::%{_uuid}%::stats::races_participated} to 0
+    if {player::%{_uuid}%::stats::total_clicks_manual} is not set:
+        set {player::%{_uuid}%::stats::total_clicks_manual} to 0
+    if {player::%{_uuid}%::stats::total_clicks_autoclicker} is not set:
+        set {player::%{_uuid}%::stats::total_clicks_autoclicker} to 0
+    if {player::%{_uuid}%::stats::join_date} is not set:
+        set {player::%{_uuid}%::stats::join_date} to now
+    
+    # Initialize race-specific (these are typically reset/managed by racing.sk per race)
+    set {player::%{_uuid}%::in_race} to false
+    delete {player::%{_uuid}%::current_track_id}
+    delete {player::%{_uuid}%::race_progress_current_race}
+    delete {player::%{_uuid}%::race_citizen_entity_id}
+    delete {player::%{_uuid}%::race_start_time_personal}
+
+    # Initialize achievement parent variable if not present (individual achievements handled by achievements.sk)
+    if {player::%{_uuid}%::achievements::*} is not set:
+        # This just ensures the parent list exists; specific achievements are added as they are defined/unlocked.
+        pass 
+
+    # Initialize cache variables (non-persistent)
+    delete {cache::%{_uuid}%::*}
+    set {cache::%{_uuid}%::current_combo_multiplier} to 1
+
+    # Welcome message for new players
+    if {player::%{_uuid}%::stats::join_date} is now: # A bit of a hack, assumes join_date was just set
+        send "{@prefix} &aWelcome to Race Clicker, %player%! Click the special item in your hotbar to get started."
+    else:
+        send "{@prefix} &aWelcome back, %player%!"
+
+on quit:
+    set {_uuid} to player's uuid
+    set {player::%{_uuid}%::stats::last_seen_date} to now
+    # Skript automatically saves variables listed in variables.csv on server stop/reload.
+    # No explicit save command is needed here for Skript's native variable system.
+    # If using YAML/DB, saving would happen here or periodically.
+
+    # Clear non-persistent cache for the player
+    delete {cache::%{_uuid}%::*}
+
+# --- Data Accessor Functions --- #
+
+# Generic function to get a player's data value with a default if not set.
+function getPlayerData(p: player, path: text, default_value: object = 0) :: object:
+    set {_uuid} to {_p}'s uuid
+    if {player::%{_uuid}%::%{_path}%} is set:
+        return {player::%{_uuid}%::%{_path}%}
+    else:
+        return {_default_value}
+
+# Generic function to set a player's data value.
+function setPlayerData(p: player, path: text, value: object):
+    set {_uuid} to {_p}'s uuid
+    set {player::%{_uuid}%::%{_path}%} to {_value}
+
+# Generic function to add to a player's numerical data value.
+function addPlayerData(p: player, path: text, value: number):
+    set {_uuid} to {_p}'s uuid
+    set {_current_value} to getPlayerData({_p}, {_path}, 0)
+    if {_current_value} is a number and {_value} is a number:
+        set {player::%{_uuid}%::%{_path}%} to {_current_value} + {_value}
+    else:
+        send console "[RaceClicker Data] Error: Tried to numerically add to non-numeric or unset path '%{_path}%' for player %{_p}%."
+
+# Generic function to remove from a player's numerical data value.
+function removePlayerData(p: player, path: text, value: number):
+    addPlayerData({_p}, {_path}, -{_value})
+
+# Generic function to delete a player's data path.
+function deletePlayerData(p: player, path: text):
+    set {_uuid} to {_p}'s uuid
+    delete {player::%{_uuid}%::%{_path}%}
+
+# --- Cache Management (Example) --- #
+# This is a conceptual placeholder. Actual caching logic will be integrated
+# into specific scripts (e.g., clicking.sk for click power) where calculations occur.
+
+# function updatePlayerCache(p: player):
+#     set {_uuid} to {_p}'s uuid
+#     # Example: Recalculate effective click power (from clicking.sk logic)
+#     set {_base_power} to getPlayerData({_p}, "speed-level", 1)
+#     set {_prestige_bonus} to getPlayerData({_p}, "prestige-level", 0) * 0.1 # Example bonus
+#     set {_combo_multiplier} to {cache::%{_uuid}%::current_combo_multiplier} ? 1
+#     set {cache::%{_uuid}%::effective_click_power} to ({_base_power} + {_prestige_bonus}) * {_combo_multiplier}
+
+# Periodically, or on demand, other scripts can call updatePlayerCache(player)
+# or directly access/calculate values as needed. For a clicker, on-demand calculation
+# during the click event is often sufficient unless calculations are extremely heavy.
+
+# --- Data Reset Function (for admin or prestige) --- #
+function resetPlayerDataForPrestige(p: player):
+    set {_uuid} to {_p}'s uuid
+    send "{@prefix} &eResetting your progress for prestige..." to {_p}
+
+    # Variables to reset
+    setPlayerData({_p}, "clicks", 0)
+    setPlayerData({_p}, "speed-level", 1)
+    setPlayerData({_p}, "autoclicker-level", 0)
+    # Keep prestige level and points
+    # {player::%{_uuid}%::prestige-level} - Handled by prestige.sk
+    # {player::%{_uuid}%::prestige-points} - Handled by prestige.sk
+
+    # Reset relevant stats (optional, depends on design)
+    # setPlayerData({_p}, "stats::total_clicks_manual", 0)
+    # setPlayerData({_p}, "stats::total_clicks_autoclicker", 0)
+    # Clear best times for tracks, or keep them as a record of past glory
+    # delete {player::%{_uuid}%::stats::best_times::*}
+
+    # Clear current race state if any (shouldn't happen if prestige is from lobby)
+    setPlayerData({_p}, "in_race", false)
+    deletePlayerData({_p}, "current_track_id")
+    deletePlayerData({_p}, "race_progress_current_race")
+    # Citizen removal would be handled by racing.sk/citizens.sk if in race
+
+    # Reset combo cache
+    set {cache::%{_uuid}%::current_combo_multiplier} to 1
+    delete {cache::%{_uuid}%::next_combo_reset_time}
+
+    send "{@prefix} &aYour progress has been reset. You can now spend your prestige points!" to {_p}
+
+# Full data wipe function (for admins)
+function wipePlayerData(target_player_uuid: text, admin_player: player = unsetValue):
+    if {player::%{_target_player_uuid}%::name} is not set:
+        if {_admin_player} is set:
+            send "{@prefix} &cNo data found for UUID %{_target_player_uuid}%." to {_admin_player}
+        else:
+            send console "[RaceClicker Data] No data found for UUID %{_target_player_uuid}% during wipe."
+        return
+    
+    set {_target_name} to {player::%{_target_player_uuid}%::name}
+    delete {player::%{_target_player_uuid}%::*}
+    delete {cache::%{_target_player_uuid}%::*}
+    # Note: This deletes ALL variables under {player::%uuid%::*}. 
+    # If the player is online, they will need to re-join for data to re-initialize.
+
+    if {_admin_player} is set:
+        send "{@prefix} &aAll data for %{_target_name}% (UUID: %{_target_player_uuid}%) has been wiped." to {_admin_player}
+        set {_target_offline_player} to {_target_player_uuid} parsed as offline player
+        if {_target_offline_player} is online:
+            kick {_target_offline_player} due to "&cYour player data has been reset by an administrator. Please rejoin."
+    else:
+        send console "[RaceClicker Data] All data for %{_target_name}% (UUID: %{_target_player_uuid}%) has been wiped."
+
+# TODO: Consider batch YAML operations if switching from Skript vars for performance on large scale.
+# TODO: Implement a command for admins to clean unused variables (e.g., from players who haven't joined in a long time).
+#       This is complex as it requires iterating all stored UUIDs and checking last_seen_date.
+".yml", "player::%player's uuid%::*")
+
+# Function to get player data safely with defaults
+# function getPlayerData(p: player, path: text, default: any = 0) :: any:
+#     return {player::%{_p}'s uuid%::%{_path}%} ? {_default}
+
+# --- Phase 1: Fix variable reference issues ---
+# - Ensure all variable references throughout the project use a consistent format, e.g., {player::%player's uuid%::variable_name}
+# - Replace `{_bonus}` placeholders with proper variable references (this will be done in other files where they appear)
+# - Fix all variable formatting in send messages (this will be done in other files)
+
+# --- Phase 7: Optimize Skript Performance ---
+# Reduce variable operations
+# Example from plan.md (conceptual, actual implementation might differ):
+# # Cache frequently used calculations
+# every 1 second:
+#     loop all players:
+#         calculateAndCachePlayerStats(loop-player)
+
+# function calculateAndCachePlayerStats(p: player):
+#     # Example: Calculate effective click power including all bonuses
+#     set {_effective_power} to {player::%{_p}'s uuid%::speed-level}
+#     # add prestige bonuses, temporary boosts, etc.
+#     set {cache::%{_p}'s uuid%::effective_click_power} to {_effective_power}
+#     # This cached value can then be used by clicking.sk or racing.sk

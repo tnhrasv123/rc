@@ -1,0 +1,144 @@
+# File: dynamic_camera_effects.sk
+# Path: race-clicker/effects/dynamic_camera_effects.sk
+# Description: Manages dynamic camera effects during races.
+
+options:
+    prefix: &6&lRaceClicker &8» &c&lCameraFX &8»
+
+# --- Phase 2: Enhance Visual Systems ---
+# Improve 3rd Person Integration
+# - Add race-specific camera angles
+#   - Dynamic camera positioning during races
+#   - Spectator mode camera switching
+#   - Cinematic finish line cameras
+
+# Variables:
+# {player::%player%::camera_effect_active::*} - Stores active camera effects for a player
+
+# --- Core Functions ---
+
+# Function to apply a screen shake effect
+function applyScreenShake(p: player, intensity: number, duration: number):
+    # This is a conceptual function. True screen shake is hard in Skript without client mods.
+    # We can simulate it with rapid, small camera movements or FOV pulses.
+    # Example: Rapidly change player's pitch/yaw slightly or FOV
+    send "%{_p}%" title "" with subtitle "<shake intensity=%{_intensity}%, duration=%{_duration}%>" for {_duration} ticks
+    # Actual implementation would involve a loop changing camera view or potion effects like nausea (subtle)
+    # For now, this is a placeholder for a more complex effect.
+    # Example using potion effect (less ideal for pure camera shake):
+    # apply nausea of tier ({_intensity} - 1) to {_p} for {_duration} ticks
+    send debug "%{options.prefix}% Applied screen shake to %{_p}% (Intensity: %{_intensity}%, Duration: %{_duration}%s)"
+
+# Function to change Field of View (FOV)
+function setPlayerFOV(p: player, fov_modifier: number, duration: number):
+    # Skript cannot directly set FOV. This is usually done with potion effects (speed) or client-side mods.
+    # We can simulate a narrow/wide FOV feel with speed/slowness or by adjusting camera distance if possible.
+    # For actual FOV, this would require external plugin integration or specific client features.
+    if {_fov_modifier} > 0:
+        apply speed of tier ({_fov_modifier} - 1) to {_p} for {_duration} ticks # Wider FOV feel
+    else if {_fov_modifier} < 0:
+        apply slowness of tier (abs({_fov_modifier}) - 1) to {_p} for {_duration} ticks # Narrower FOV feel
+    send debug "%{options.prefix}% Set FOV modifier for %{_p}% (Modifier: %{_fov_modifier}%, Duration: %{_duration}%s)"
+    # Store effect to remove it later if needed
+    set {player::%{_p}%::camera_effect_active::fov_duration} to game time
+    set {player::%{_p}%::camera_effect_active::fov_end_time} to game time + {_duration} seconds
+
+# Function to clear active FOV effects (e.g., restore normal FOV)
+function clearPlayerFOV(p: player):
+    remove speed from {_p}
+    remove slowness from {_p}
+    delete {player::%{_p}%::camera_effect_active::fov_duration}
+    delete {player::%{_p}%::camera_effect_active::fov_end_time}
+    send debug "%{options.prefix}% Cleared FOV effects for %{_p}%"
+
+# Function to apply a cinematic effect (e.g., letterbox, slow motion - conceptual)
+function applyCinematicEffect(p: player, effect_type: text, duration: number):
+    # True cinematic effects are complex. Letterbox might be simulated with black GUI elements.
+    # Slow motion is typically server-wide or requires advanced manipulation.
+    send debug "%{options.prefix}% Applied cinematic effect '%{_effect_type}%' to %{_p}% for %{_duration}%s (Conceptual)"
+    if {_effect_type} is "letterbox":
+        # Placeholder: send action bar messages or use GUI tricks
+        send action bar "<SOLID_BLACK_BAR_TOP>" to {_p}
+        send action bar "<SOLID_BLACK_BAR_BOTTOM>" to {_p} # These would need to be actual GUI elements
+    # Store effect
+    set {player::%{_p}%::camera_effect_active::%{_effect_type}%_end_time} to game time + {_duration} seconds
+
+# Function to clear a specific cinematic effect
+function clearCinematicEffect(p: player, effect_type: text):
+    delete {player::%{_p}%::camera_effect_active::%{_effect_type}%_end_time}
+    if {_effect_type} is "letterbox":
+        # Placeholder: clear action bar or remove GUI elements
+        send action bar "" to {_p}
+    send debug "%{options.prefix}% Cleared cinematic effect '%{_effect_type}%' for %{_p}%"
+
+# --- Event Triggers (Examples - to be called from racing.sk or other scripts) ---
+
+# Example: Trigger when hitting a boost pad
+function onBoostPadHit(p: player):
+    execute function setPlayerFOV({_p}, 1, 2) # Slight FOV increase for 2 seconds
+    # Potentially a very minor, quick screen shake
+    # execute function applyScreenShake({_p}, 1, 0.5)
+
+# Example: Trigger when hitting an obstacle
+function onObstacleHit(p: player):
+    execute function applyScreenShake({_p}, 2, 1) # Moderate shake for 1 second
+    execute function setPlayerFOV({_p}, -1, 1) # Slight FOV decrease for 1 second
+
+# Example: Trigger when crossing finish line (especially for winner)
+function onRaceFinish(p: player, position: integer):
+    if {_position} is 1:
+        execute function applyCinematicEffect({_p}, "letterbox", 5) # Letterbox for 5s
+        # Potentially a slow-motion effect (conceptual)
+        send debug "%{options.prefix}% Winner %{_p}% crossed finish line! Applying cinematic effects."
+    else:
+        # Minor effect for other finishers
+        send debug "%{options.prefix}% Player %{_p}% finished in position %{_position}%."
+
+# Periodically check and clear expired effects
+every 1 second:
+    loop all players:
+        if {player::%loop-player%::camera_effect_active::fov_end_time} is set:
+            if game time is after {player::%loop-player%::camera_effect_active::fov_end_time}:
+                execute function clearPlayerFOV(loop-player)
+        
+        # Loop through other potential cinematic effects stored with _end_time
+        # Example for letterbox, assuming it was stored similarly
+        if {player::%loop-player%::camera_effect_active::letterbox_end_time} is set:
+            if game time is after {player::%loop-player%::camera_effect_active::letterbox_end_time}:
+                execute function clearCinematicEffect(loop-player, "letterbox")
+
+# --- Helper Functions (if any) ---
+
+# --- Commands (for testing) ---
+command /rccamerafx <player> <effect> [<arg1>] [<arg2>]:
+    permission: raceclicker.admin
+    trigger:
+        set {_p} to arg-1
+        if {_p} is not set:
+            send "%{options.prefix}% &cPlayer not found or offline."
+            stop
+
+        if arg-2 is "shake":
+            set {_intensity} to arg-3 parsed as number ? 1
+            set {_duration} to arg-4 parsed as number ? 1
+            execute function applyScreenShake({_p}, {_intensity}, {_duration})
+            send "%{options.prefix}% Applied screen shake to %{_p}%."
+        else if arg-2 is "fov":
+            set {_modifier} to arg-3 parsed as number ? 1
+            set {_duration} to arg-4 parsed as number ? 1
+            execute function setPlayerFOV({_p}, {_modifier}, {_duration})
+            send "%{options.prefix}% Set FOV for %{_p}%."
+        else if arg-2 is "clearfov":
+            execute function clearPlayerFOV({_p})
+            send "%{options.prefix}% Cleared FOV for %{_p}%."
+        else if arg-2 is "cinematic":
+            set {_type} to arg-3 ? "letterbox"
+            set {_duration} to arg-4 parsed as number ? 5
+            execute function applyCinematicEffect({_p}, {_type}, {_duration})
+            send "%{options.prefix}% Applied cinematic '%{_type}%' to %{_p}%."
+        else if arg-2 is "clearcinematic":
+            set {_type} to arg-3 ? "letterbox"
+            execute function clearCinematicEffect({_p}, {_type})
+            send "%{options.prefix}% Cleared cinematic '%{_type}%' for %{_p}%."
+        else:
+            send "%{options.prefix}% &cUnknown effect. Usage: /rccamerafx <player> <shake|fov|clearfov|cinematic|clearcinematic> [args]"

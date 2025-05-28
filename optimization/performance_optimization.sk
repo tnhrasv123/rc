@@ -1,0 +1,158 @@
+# File: performance_optimization.sk
+# Description: Performance optimization system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Performance settings
+    max_particles_per_player: 50 # Maximum particles per player
+    particle_cleanup_interval: 10 ticks # How often to clean up particles
+    max_updates_per_tick: 100 # Maximum updates per tick
+    update_batch_size: 10 # Number of players to update per batch
+    
+# Variables:
+# {player::%uuid%::particles::*} = text (list of active particles)
+# {player::%uuid%::last_update_time} = timestamp (last update time)
+# {player::%uuid%::update_priority} = number (update priority)
+
+# Function to optimize particle effects
+every {@particle_cleanup_interval}:
+    loop all players:
+        set {_p} to loop-player
+        set {_uuid} to {_p}'s uuid
+        
+        # Clean up old particles
+        if size of {player::%{_uuid}%::particles::*} > {@max_particles_per_player}:
+            loop {player::%{_uuid}%::particles::*}:
+                set {_particle} to loop-value
+                remove {_particle} from {player::%{_uuid}%::particles::*}
+                stop loop if size of {player::%{_uuid}%::particles::*} <= {@max_particles_per_player}
+        
+        # Optimize particle rendering
+        if {player::%{_uuid}%::particles::*} is set:
+            set {_count} to 0
+            loop {player::%{_uuid}%::particles::*}:
+                if {_count} >= {@max_particles_per_player}:
+                    break
+                add 1 to {_count}
+            
+            # Remove excess particles
+            if {_count} > {@max_particles_per_player}:
+                loop {player::%{_uuid}%::particles::*}:
+                    remove loop-value from {player::%{_uuid}%::particles::*}
+                    stop loop if size of {player::%{_uuid}%::particles::*} <= {@max_particles_per_player}
+
+# Function to batch process updates
+every 1 tick:
+    set {_batch_size} to {@update_batch_size}
+    set {_processed} to 0
+    
+    # Sort players by priority
+    set {_players} to all players sorted by {player::%uuid%::update_priority} descending
+    
+    # Process players in batches
+    loop {_players}:
+        if {_processed} >= {@max_updates_per_tick}:
+            break
+            
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        
+        # Update player state
+        updatePlayerState({_p})
+        
+        # Update camera if in race
+        if {player::%{_uuid}%::in_race} is true:
+            updateCameraPosition({_p})
+        
+        # Update particles
+        updateParticles({_p})
+        
+        add 1 to {_processed}
+        
+        # Break if reached batch size
+        if {_processed} >= {_batch_size}:
+            break
+
+# Function to update player state
+function updatePlayerState(p: player):
+    set {_uuid} to {_p}'s uuid
+    
+    # Update click stats
+    if {player::%{_uuid}%::clicks} is set:
+        set {player::%{_uuid}%::clicks} to {player::%{_uuid}%::clicks}
+    
+    # Update race progress
+    if {player::%{_uuid}%::in_race} is true:
+        updateRaceProgress({_p})
+    
+    # Update achievements
+    checkAchievements({_p})
+
+# Function to update particles
+function updateParticles(p: player):
+    set {_uuid} to {_p}'s uuid
+    
+    if {player::%{_uuid}%::particles::*} is set:
+        loop {player::%{_uuid}%::particles::*}:
+            set {_particle} to loop-value
+            
+            # Update particle position
+            set {_loc} to location of {_p}
+            
+            # Remove old particles
+            if now - {player::%{_uuid}%::last_update_time} > 200 ticks:
+                remove {_particle} from {player::%{_uuid}%::particles::*}
+
+# Function to optimize memory usage
+function optimizeMemory():
+    # Clean up unused variables
+    loop all players:
+        set {_uuid} to loop-player's uuid
+        
+        # Clean up camera variables
+        if {player::%{_uuid}%::in_race} is not true:
+            delete {player::%{_uuid}%::camera::*}
+        
+        # Clean up race variables
+        if {player::%{_uuid}%::in_race} is not true:
+            delete {player::%{_uuid}%::race::*}
+        
+        # Clean up achievement variables
+        if size of {player::%{_uuid}%::achievements::*} > 100:
+            loop all keys of {player::%{_uuid}%::achievements::*}:
+                if {player::%{_uuid}%::achievements::%loop-value%} is false:
+                    delete {player::%{_uuid}%::achievements::%loop-value%}
+
+# Function to set update priority
+function setUpdatePriority(p: player, priority: number):
+    set {_uuid} to {_p}'s uuid
+    set {player::%{_uuid}%::update_priority} to {_priority}
+    
+    # Send debug message if enabled
+    if {rc.debug_mode} is true:
+        send "{@prefix} &7[Debug] Set update priority for %{_p}% to %{_priority}%" to console
+
+# Function to get update priority
+function getUpdatePriority(p: player) :: number:
+    set {_uuid} to {_p}'s uuid
+    return {player::%{_uuid}%::update_priority} ? 0
+
+# Command to force optimization
+command /optimize:
+    permission: raceclicker.admin
+    trigger:
+        optimizeMemory()
+        send "{@prefix} &aOptimized memory usage!" to player
+
+# Event handler for player join
+every player joins:
+    set {_uuid} to player's uuid
+    set {player::%{_uuid}%::update_priority} to 0
+    set {player::%{_uuid}%::last_update_time} to now
+    set {player::%{_uuid}%::particles::*} to []
+
+# Event handler for player quit
+every player quits:
+    set {_uuid} to player's uuid
+    delete {player::%{_uuid}%::*}
+    optimizeMemory()

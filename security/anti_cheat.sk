@@ -1,0 +1,209 @@
+# File: anti_cheat.sk
+# Description: Anti-cheat system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Anti-cheat settings
+    max_clicks_per_second: 20 # Maximum clicks allowed per second
+    max_combo_multiplier: 10 # Maximum allowed combo multiplier
+    max_speed_multiplier: 2.0 # Maximum allowed speed multiplier
+    max_power_multiplier: 5.0 # Maximum allowed power multiplier
+    
+    # Detection thresholds
+    click_pattern_threshold: 0.8 # Pattern matching threshold
+    speed_threshold: 1.5 # Speed detection threshold
+    power_threshold: 4.0 # Power detection threshold
+    combo_threshold: 8.0 # Combo detection threshold
+    
+    # Punishment settings
+    ban_duration: 1 day # Default ban duration
+    warning_cooldown: 1 hour # Warning cooldown
+    max_warnings: 3 # Maximum warnings before ban
+    
+# Variables:
+# {player::%uuid%::click_history::*} = number (list of click timestamps)
+# {player::%uuid%::warnings} = number (warning count)
+# {player::%uuid%::last_warning} = timestamp (last warning time)
+# {player::%uuid%::detected_cheats::*} = text (list of detected cheats)
+
+# Function to check click pattern
+every 1 tick:
+    loop all players:
+        set {_p} to loop-player
+        set {_uuid} to {_p}'s uuid
+        
+        if {player::%{_uuid}%::click_history::*} is set:
+            set {_clicks} to size of {player::%{_uuid}%::click_history::*}
+            set {_time} to now
+            
+            # Clean up old clicks
+            loop {player::%{_uuid}%::click_history::*}:
+                if {_time} - loop-value > 1000 ticks:
+                    remove loop-value from {player::%{_uuid}%::click_history::*}
+            
+            # Check click rate
+            set {_click_rate} to {_clicks} / (1000 / 20) # 20 ticks per second
+            if {_click_rate} > {@max_clicks_per_second}:
+                detectCheat({_p}, "Fast Clicking")
+            
+            # Check click pattern
+            if {_clicks} >= 10:
+                set {_pattern} to calculateClickPattern({_p})
+                if {_pattern} > {@click_pattern_threshold}:
+                    detectCheat({_p}, "Pattern Clicking")
+
+# Function to check speed
+every 1 tick:
+    loop all players:
+        if {player::%{_uuid}%::in_race} is true:
+            set {_speed} to calculateSpeed({_p})
+            if {_speed} > {@max_speed_multiplier}:
+                detectCheat({_p}, "Speed Hack")
+
+# Function to check power
+every 1 tick:
+    loop all players:
+        set {_power} to calculatePower({_p})
+        if {_power} > {@max_power_multiplier}:
+            detectCheat({_p}, "Power Hack")
+
+# Function to check combo
+every 1 tick:
+    loop all players:
+        set {_combo} to calculateCombo({_p})
+        if {_combo} > {@max_combo_multiplier}:
+            detectCheat({_p}, "Combo Hack")
+
+# Function to detect cheat
+function detectCheat(p: player, cheat_type: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Check warning cooldown
+    if now - {player::%{_uuid}%::last_warning} < {@warning_cooldown}:
+        return
+    
+    # Add warning
+    add 1 to {player::%{_uuid}%::warnings}
+    set {player::%{_uuid}%::last_warning} to now
+    
+    # Add detected cheat
+    add {_cheat_type} to {player::%{_uuid}%::detected_cheats::*}
+    
+    # Send warning
+    send "{@prefix} &cWarning: %{_cheat_type}% detected!" to {_p}
+    send "{@prefix} &cYou have %{player::%{_uuid}%::warnings}% warnings." to {_p}
+    
+    # Check for ban
+    if {player::%{_uuid}%::warnings} >= {@max_warnings}:
+        banPlayer({_p})
+
+# Function to ban player
+function banPlayer(p: player):
+    set {_uuid} to {_p}'s uuid
+    
+    # Ban player
+    ban {_p} for {@ban_duration} with reason "Multiple cheating attempts"
+    
+    # Log ban
+    logBan({_p})
+    
+    # Reset warnings
+    set {player::%{_uuid}%::warnings} to 0
+    set {player::%{_uuid}%::detected_cheats::*} to []
+
+# Function to calculate click pattern
+function calculateClickPattern(p: player) :: number:
+    set {_uuid} to {_p}'s uuid
+    set {_pattern} to 0
+    
+    if {player::%{_uuid}%::click_history::*} is set:
+        set {_clicks} to {player::%{_uuid}%::click_history::*}
+        set {_size} to size of {_clicks}
+        
+        if {_size} >= 10:
+            set {_sum} to 0
+            loop {_clicks}:
+                add loop-value to {_sum}
+            
+            set {_avg} to {_sum} / {_size}
+            set {_variance} to 0
+            
+            loop {_clicks}:
+                set {_diff} to (loop-value - {_avg}) ^ 2
+                add {_diff} to {_variance}
+            
+            set {_variance} to {_variance} / {_size}
+            set {_pattern} to 1 - sqrt({_variance}) / {_avg}
+    
+    return {_pattern}
+
+# Function to calculate speed
+function calculateSpeed(p: player) :: number:
+    set {_uuid} to {_p}'s uuid
+    set {_speed} to 1
+    
+    if {player::%{_uuid}%::speed_multiplier} is set:
+        set {_speed} to {player::%{_uuid}%::speed_multiplier}
+    
+    return {_speed}
+
+# Function to calculate power
+function calculatePower(p: player) :: number:
+    set {_uuid} to {_p}'s uuid
+    set {_power} to 1
+    
+    if {player::%{_uuid}%::power_multiplier} is set:
+        set {_power} to {player::%{_uuid}%::power_multiplier}
+    
+    return {_power}
+
+# Function to calculate combo
+function calculateCombo(p: player) :: number:
+    set {_uuid} to {_p}'s uuid
+    set {_combo} to 1
+    
+    if {player::%{_uuid}%::combo_multiplier} is set:
+        set {_combo} to {player::%{_uuid}%::combo_multiplier}
+    
+    return {_combo}
+
+# Function to log ban
+function logBan(p: player):
+    set {_uuid} to {_p}'s uuid
+    set {_timestamp} to now in "yyyy-MM-dd HH:mm:ss"
+    
+    # Write to ban log
+    append line "[%{_timestamp}%] %{_p}% (UUID: %{_uuid}%) banned for cheating" to file "raceclicker_bans.log"
+    
+    # Broadcast to admins
+    broadcast "{@prefix} &c%{_p}% has been banned for cheating!" to players with permission "raceclicker.admin"
+
+# Command to check player's warnings
+command /checkcheat <player>:
+    permission: raceclicker.admin
+    trigger:
+        set {_target} to arg-1
+        set {_uuid} to {_target}'s uuid
+        
+        send "{@prefix} &6Cheat Detection for %{_target}%:" to player
+        send "&eWarnings: &a%{player::%{_uuid}%::warnings}%" to player
+        send "&eDetected Cheats: &a%{player::%{_uuid}%::detected_cheats::*}%" to player
+        
+        # Show detailed stats
+        send "&eClick Rate: &a%{calculateClickPattern(_target)}%" to player
+        send "&eSpeed: &a%{calculateSpeed(_target)}%" to player
+        send "&ePower: &a%{calculatePower(_target)}%" to player
+        send "&eCombo: &a%{calculateCombo(_target)}%" to player
+
+# Command to reset warnings
+command /resetwarnings <player>:
+    permission: raceclicker.admin
+    trigger:
+        set {_target} to arg-1
+        set {_uuid} to {_target}'s uuid
+        
+        set {player::%{_uuid}%::warnings} to 0
+        set {player::%{_uuid}%::detected_cheats::*} to []
+        
+        send "{@prefix} &aReset warnings for %{_target}%" to player
+        broadcast "{@prefix} &6%{_target}% has been pardoned by %{player}%" to players with permission "raceclicker.admin"

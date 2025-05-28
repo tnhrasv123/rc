@@ -1,0 +1,510 @@
+# File: clan_system.sk
+# Description: Clan system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Clan settings
+    clan_creation_cost: 10000 # Cost to create a clan
+    clan_name_length: [3, 20] # Minimum and maximum clan name length
+    clan_tag_length: [2, 5] # Minimum and maximum clan tag length
+    clan_max_members: 50 # Maximum clan members
+    clan_invite_cooldown: 5 minutes # Cooldown between clan invites
+    
+    # Clan ranks
+    clan_ranks:
+        - "Leader"
+        - "Officer"
+        - "Member"
+        - "Recruit"
+    
+    # Clan permissions
+    clan_permissions:
+        leader:
+            - "clan.kick"
+            - "clan.promote"
+            - "clan.demote"
+            - "clan.sethome"
+            - "clan.setrank"
+        officer:
+            - "clan.kick"
+            - "clan.promote"
+            - "clan.demote"
+            - "clan.setrank"
+        member:
+            - "clan.chat"
+            - "clan.leave"
+        recruit:
+            - "clan.chat"
+
+# Variables:
+# {clan::%clan_name%::tag} = text (clan tag)
+# {clan::%clan_name%::leader} = text (clan leader)
+# {clan::%clan_name%::members::*} = text (clan members)
+# {clan::%clan_name%::rank::*} = text (clan member ranks)
+# {clan::%clan_name%::bank} = number (clan bank)
+# {clan::%clan_name%::home} = location (clan home)
+# {clan::%clan_name%::xp} = number (clan xp)
+# {clan::%clan_name%::level} = number (clan level)
+# {player::%uuid%::clan} = text (player's clan)
+# {player::%uuid%::clan_rank} = text (player's clan rank)
+
+# Function to create clan
+command /createclan <text>:
+    permission: raceclicker.clan.create
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has clan
+        if not {player::%{_uuid}%::clan} is set:
+            send "{@prefix} &cYou are already in a clan!" to player
+            return
+            
+        # Check clan name
+        if length of arg-1 is not between {@clan_name_length::0} and {@clan_name_length::1}:
+            send "{@prefix} &cClan name must be between %{clan_name_length::0}% and %{clan_name_length::1}% characters!" to player
+            return
+            
+        # Check if clan exists
+        if not {clan::%arg-1%::leader} is set:
+            send "{@prefix} &cClan %{arg-1}% already exists!" to player
+            return
+            
+        # Check cost
+        if {player::%{_uuid}%::clickcoins} < {@clan_creation_cost}:
+            send "{@prefix} &cYou need %{@clan_creation_cost}% ClickCoins to create a clan!" to player
+            return
+            
+        # Create clan
+        set {clan::%arg-1%::leader} to player
+        set {clan::%arg-1%::members::*} to [player]
+        set {clan::%arg-1%::rank::*} to ["Leader"]
+        set {clan::%arg-1%::bank} to 0
+        set {clan::%arg-1%::xp} to 0
+        set {clan::%arg-1%::level} to 1
+        set {player::%{_uuid}%::clan} to arg-1
+        set {player::%{_uuid}%::clan_rank} to "Leader"
+        subtract {@clan_creation_cost} from {player::%{_uuid}%::clickcoins}
+        
+        # Announce clan creation
+        broadcast "{@prefix} &6Clan created: %{arg-1}%" to all players
+        send "{@prefix} &aCreated clan %{arg-1}%!" to player
+
+# Function to join clan
+command /joinclan <text>:
+    permission: raceclicker.clan.join
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has clan
+        if not {player::%{_uuid}%::clan} is set:
+            send "{@prefix} &cYou are already in a clan!" to player
+            return
+            
+        # Check if clan exists
+        if not {clan::%arg-1%::leader} is set:
+            send "{@prefix} &cClan %{arg-1}% does not exist!" to player
+            return
+            
+        # Check if clan is full
+        if size of {clan::%arg-1%::members::*} >= {@clan_max_members}:
+            send "{@prefix} &cClan %{arg-1}% is full!" to player
+            return
+            
+        # Check if player has invite
+        if not {player::%{_uuid}%::clan_invite} is set:
+            send "{@prefix} &cYou don't have an invite to clan %{arg-1}%!" to player
+            return
+            
+        # Join clan
+        add player to {clan::%arg-1%::members::*}
+        add "Member" to {clan::%arg-1%::rank::*}
+        set {player::%{_uuid}%::clan} to arg-1
+        set {player::%{_uuid}%::clan_rank} to "Member"
+        remove {_uuid} from {player::%{_uuid}%::clan_invite}
+        
+        # Notify clan
+        broadcast "{@prefix} &6%{player}% joined clan %{arg-1}%!" to players with permission "raceclicker.clan.view"
+        send "{@prefix} &aSuccessfully joined clan %{arg-1}%!" to player
+
+# Function to leave clan
+command /leaveclan:
+    permission: raceclicker.clan.leave
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has clan
+        if not {player::%{_uuid}%::clan} is set:
+            send "{@prefix} &cYou are not in a clan!" to player
+            return
+            
+        # Get clan info
+        set {_clan} to {player::%{_uuid}%::clan}
+        
+        # Remove from clan
+        remove player from {clan::%{_clan}%::members::*}
+        remove {player::%{_uuid}%::clan_rank} from {clan::%{_clan}%::rank::*}
+        set {player::%{_uuid}%::clan} to null
+        
+        # Notify clan
+        loop {clan::%{_clan}%::members::*}:
+            send "{@prefix} &6%{player}% left clan %{_clan}%" to loop-value
+        
+        send "{@prefix} &aLeft clan %{_clan}%!" to player
+
+# Function to kick member
+command /clankick <player>:
+    permission: raceclicker.clan.kick
+    trigger:
+        set {_uuid} to player's uuid
+        set {_target} to arg-1
+        set {_target_uuid} to {_target}'s uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::clan_rank} is not "Leader" and {player::%{_uuid}%::clan_rank} is not "Officer":
+            send "{@prefix} &cYou don't have permission to kick!" to player
+            return
+            
+        # Check if target is in same clan
+        if {player::%{_target_uuid}%::clan} is not {player::%{_uuid}%::clan}:
+            send "{@prefix} &c%{_target}% is not in your clan!" to player
+            return
+            
+        # Kick member
+        set {_clan} to {player::%{_uuid}%::clan}
+        remove {_target} from {clan::%{_clan}%::members::*}
+        remove {player::%{_target_uuid}%::clan_rank} from {clan::%{_clan}%::rank::*}
+        set {player::%{_target_uuid}%::clan} to null
+        
+        # Notify clan
+        loop {clan::%{_clan}%::members::*}:
+            send "{@prefix} &6%{player}% kicked %{_target}% from clan %{_clan}%" to loop-value
+        
+        send "{@prefix} &aKicked %{_target}% from clan %{_clan}%!" to player
+
+# Function to promote member
+command /clanpromote <player>:
+    permission: raceclicker.clan.promote
+    trigger:
+        set {_uuid} to player's uuid
+        set {_target} to arg-1
+        set {_target_uuid} to {_target}'s uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::clan_rank} is not "Leader":
+            send "{@prefix} &cYou don't have permission to promote!" to player
+            return
+            
+        # Check if target is in same clan
+        if {player::%{_target_uuid}%::clan} is not {player::%{_uuid}%::clan}:
+            send "{@prefix} &c%{_target}% is not in your clan!" to player
+            return
+            
+        # Promote member
+        set {_clan} to {player::%{_uuid}%::clan}
+        set {_current_rank} to {player::%{_target_uuid}%::clan_rank}
+        set {_new_rank} to next element of {@clan_ranks::*} after {_current_rank}
+        
+        if {_new_rank} is not set:
+            send "{@prefix} &c%{_target}% is already at the highest rank!" to player
+            return
+            
+        # Update rank
+        remove {_current_rank} from {clan::%{_clan}%::rank::*}
+        add {_new_rank} to {clan::%{_clan}%::rank::*}
+        set {player::%{_target_uuid}%::clan_rank} to {_new_rank}
+        
+        # Notify clan
+        loop {clan::%{_clan}%::members::*}:
+            send "{@prefix} &6%{player}% promoted %{_target}% to %{_new_rank}%" to loop-value
+        
+        send "{@prefix} &aPromoted %{_target}% to %{_new_rank}%!" to player
+
+# Function to demote member
+command /clandemote <player>:
+    permission: raceclicker.clan.demote
+    trigger:
+        set {_uuid} to player's uuid
+        set {_target} to arg-1
+        set {_target_uuid} to {_target}'s uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::clan_rank} is not "Leader":
+            send "{@prefix} &cYou don't have permission to demote!" to player
+            return
+            
+        # Check if target is in same clan
+        if {player::%{_target_uuid}%::clan} is not {player::%{_uuid}%::clan}:
+            send "{@prefix} &c%{_target}% is not in your clan!" to player
+            return
+            
+        # Demote member
+        set {_clan} to {player::%{_uuid}%::clan}
+        set {_current_rank} to {player::%{_target_uuid}%::clan_rank}
+        set {_new_rank} to previous element of {@clan_ranks::*} before {_current_rank}
+        
+        if {_new_rank} is not set:
+            send "{@prefix} &c%{_target}% is already at the lowest rank!" to player
+            return
+            
+        # Update rank
+        remove {_current_rank} from {clan::%{_clan}%::rank::*}
+        add {_new_rank} to {clan::%{_clan}%::rank::*}
+        set {player::%{_target_uuid}%::clan_rank} to {_new_rank}
+        
+        # Notify clan
+        loop {clan::%{_clan}%::members::*}:
+            send "{@prefix} &6%{player}% demoted %{_target}% to %{_new_rank}%" to loop-value
+        
+        send "{@prefix} &aDemoted %{_target}% to %{_new_rank}%!" to player
+
+# Function to set clan home
+command /clansethome:
+    permission: raceclicker.clan.sethome
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::clan_rank} is not "Leader" and {player::%{_uuid}%::clan_rank} is not "Officer":
+            send "{@prefix} &cYou don't have permission to set clan home!" to player
+            return
+            
+        # Set clan home
+        set {_clan} to {player::%{_uuid}%::clan}
+        set {clan::%{_clan}%::home} to player's location
+        
+        # Notify clan
+        loop {clan::%{_clan}%::members::*}:
+            send "{@prefix} &6%{player}% set clan home!" to loop-value
+        
+        send "{@prefix} &aSet clan home!" to player
+
+# Function to teleport to clan home
+command /clanthome:
+    permission: raceclicker.clan.home
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if clan has home
+        if {clan::%{player::%{_uuid}%::clan}%::home} is not set:
+            send "{@prefix} &cClan home not set!" to player
+            return
+            
+        # Teleport to clan home
+        teleport player to {clan::%{player::%{_uuid}%::clan}%::home}
+        send "{@prefix} &aTeleported to clan home!" to player
+
+# Function to view clan info
+command /claninfo:
+    permission: raceclicker.clan.info
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has clan
+        if {player::%{_uuid}%::clan} is not set:
+            send "{@prefix} &cYou are not in a clan!" to player
+            return
+            
+        # Get clan info
+        set {_clan} to {player::%{_uuid}%::clan}
+        set {_info} to "&6Clan Info: %{_clan}%\n"
+        append "&eLeader: &a%{clan::%{_clan}%::leader}%\n" to {_info}
+        append "&eMembers: &a%{size of {clan::%{_clan}%::members::*}}%/%{@clan_max_members}%\n" to {_info}
+        append "&eLevel: &a%{clan::%{_clan}%::level}%\n" to {_info}
+        append "&eXP: &a%{clan::%{_clan}%::xp}%\n" to {_info}
+        append "&eBank: &a%{clan::%{_clan}%::bank}% ClickCoins\n" to {_info}
+        append "&eMembers:\n" to {_info}
+        
+        # Add member list
+        loop {clan::%{_clan}%::members::*}:
+            set {_member} to loop-value
+            set {_member_uuid} to {_member}'s uuid
+            append "&7- %{_member}% &8(&a%{player::%{_member_uuid}%::clan_rank}%&8)\n" to {_info}
+        
+        send "{@prefix} %{_info}%" to player
+
+# Function to deposit to clan bank
+command /clandeposit <number>:
+    permission: raceclicker.clan.bank
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has clan
+        if {player::%{_uuid}%::clan} is not set:
+            send "{@prefix} &cYou are not in a clan!" to player
+            return
+            
+        # Check if player has enough coins
+        if {player::%{_uuid}%::clickcoins} < arg-1:
+            send "{@prefix} &cYou don't have enough ClickCoins!" to player
+            return
+            
+        # Deposit coins
+        set {_clan} to {player::%{_uuid}%::clan}
+        add arg-1 to {clan::%{_clan}%::bank}
+        subtract arg-1 from {player::%{_uuid}%::clickcoins}
+        
+        # Notify clan
+        loop {clan::%{_clan}%::members::*}:
+            send "{@prefix} &6%{player}% deposited %{arg-1}% ClickCoins to clan bank!" to loop-value
+        
+        send "{@prefix} &aDeposited %{arg-1}% ClickCoins to clan bank!" to player
+
+# Function to withdraw from clan bank
+command /clanwithdraw <number>:
+    permission: raceclicker.clan.bank
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check clan membership
+        if not {player::%{_uuid}%::clan} is set:
+            send "{@prefix} &cYou are not in a clan!" to player
+            return
+            
+        # Get clan info
+        set {_clan} to {player::%{_uuid}%::clan}
+        set {_rank} to {player::%{_uuid}%::clan_rank}
+        
+        # Check permissions
+        if not {_rank} is "Leader" and not {_rank} is "Officer":
+            send "{@prefix} &cYou don't have permission to withdraw from clan bank!" to player
+            return
+            
+        # Check amount
+        if arg-1 <= 0:
+            send "{@prefix} &cAmount must be greater than 0!" to player
+            return
+            
+        # Check clan bank balance
+        if {clan::%{_clan}%::bank} < arg-1:
+            send "{@prefix} &cClan bank doesn't have enough funds!" to player
+            return
+            
+        # Withdraw funds
+        subtract arg-1 from {clan::%{_clan}%::bank}
+        add arg-1 to {player::%{_uuid}%::clickcoins}
+        
+        # Notify clan
+        broadcast "{@prefix} &6%{player}% withdrew %{arg-1}% ClickCoins from clan bank!" to players with permission "raceclicker.clan.view"
+        send "{@prefix} &aSuccessfully withdrew %{arg-1}% ClickCoins from clan bank!" to player
+
+# Function to invite player to clan
+command /claninvite <player>:
+    permission: raceclicker.clan.invite
+    trigger:
+        set {_uuid} to player's uuid
+        set {_target} to arg-1
+        set {_target_uuid} to {_target}'s uuid
+        
+        # Check if player has clan
+        if {player::%{_uuid}%::clan} is not set:
+            send "{@prefix} &cYou are not in a clan!" to player
+            return
+            
+        # Check if target has clan
+        if {player::%{_target_uuid}%::clan} is set:
+            send "{@prefix} &c%{_target}% is already in a clan!" to player
+            return
+            
+        # Check cooldown
+        if {player::%{_uuid}%::last_invite} is set and now - {player::%{_uuid}%::last_invite} < {@clan_invite_cooldown}:
+            send "{@prefix} &cYou must wait %{@clan_invite_cooldown}% between invites!" to player
+            return
+            
+        # Send invite
+        set {_clan} to {player::%{_uuid}%::clan}
+        send "{@prefix} &6%{player}% invited you to clan %{_clan}%!" to {_target}
+        send "{@prefix} &aSent invite to %{_target}%!" to player
+        set {player::%{_uuid}%::last_invite} to now
+        
+        # Wait for response
+        wait 30 seconds
+        if {player::%{_target_uuid}%::clan} is not set:
+            send "{@prefix} &cInvite to %{_target}% expired!" to player
+
+# Function to accept clan invite
+command /clanaccept <text>:
+    permission: raceclicker.clan.accept
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check if player has clan
+        if {player::%{_uuid}%::clan} is set:
+            send "{@prefix} &cYou are already in a clan!" to player
+            return
+            
+        # Check if clan exists
+        if {clan::%arg-1%::leader} is not set:
+            send "{@prefix} &cClan %{arg-1}% does not exist!" to player
+            return
+            
+        # Join clan
+        set {_clan} to arg-1
+        add player to {clan::%{_clan}%::members::*}
+        add "Member" to {clan::%{_clan}%::rank::*}
+        set {player::%{_uuid}%::clan} to {_clan}
+        set {player::%{_uuid}%::clan_rank} to "Member"
+        
+        # Notify clan
+        loop {clan::%{_clan}%::members::*}:
+            send "{@prefix} &6%{player}% joined clan %{_clan}%" to loop-value
+        
+        send "{@prefix} &aJoined clan %{_clan}%!" to player
+
+# Function to set clan tag
+command /clansettag <text>:
+    permission: raceclicker.clan.tag
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Check permissions
+        if {player::%{_uuid}%::clan_rank} is not "Leader":
+            send "{@prefix} &cYou don't have permission to set clan tag!" to player
+            return
+            
+        # Check tag length
+        if length of arg-1 is not between {@clan_tag_length::0} and {@clan_tag_length::1}:
+            send "{@prefix} &cClan tag must be between %{clan_tag_length::0}% and %{clan_tag_length::1}% characters!" to player
+            return
+            
+        # Set clan tag
+        set {_clan} to {player::%{_uuid}%::clan}
+        set {clan::%{_clan}%::tag} to arg-1
+        
+        # Update clan chat
+        loop {clan::%{_clan}%::members::*}:
+            set {_member} to loop-value
+            set {_member_uuid} to {_member}'s uuid
+            set {_member}'s display name to "&8[&6%{clan::%{_clan}%::tag}%&8] %{_member}%"
+        
+        # Notify clan
+        loop {clan::%{_clan}%::members::*}:
+            send "{@prefix} &6%{player}% set clan tag to %{arg-1}%" to loop-value
+        
+        send "{@prefix} &aSet clan tag to %{arg-1}%!" to player
+
+# Function to handle clan chat
+on chat:
+    if player has clan:
+        set {_clan} to {player::%player's uuid%::clan}
+        set event-message to "&8[&6%{clan::%{_clan}%::tag}%&8] %{event-message}%"
+
+# Function to calculate clan xp
+on race completion:
+    set {_uuid} to player's uuid
+    if {player::%{_uuid}%::clan} is set:
+        set {_clan} to {player::%{_uuid}%::clan}
+        add 100 to {clan::%{_clan}%::xp}
+        
+        # Check level up
+        if {clan::%{_clan}%::xp} >= {clan::%{_clan}%::level} * 1000:
+            add 1 to {clan::%{_clan}%::level}
+            set {clan::%{_clan}%::xp} to 0
+            
+            # Give level up rewards
+            set {_reward} to {clan::%{_clan}%::level} * 1000
+            add {_reward} to {clan::%{_clan}%::bank}
+            
+            # Notify clan
+            loop {clan::%{_clan}%::members::*}:
+                send "{@prefix} &6Clan level up! New level: %{clan::%{_clan}%::level}%" to loop-value
+                send "{@prefix} &6Clan bank received %{_reward}% ClickCoins!" to loop-value

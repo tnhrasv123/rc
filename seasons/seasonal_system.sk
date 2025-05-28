@@ -1,0 +1,452 @@
+# File: seasonal_system.sk
+# Description: Seasonal system for Race Clicker
+
+options:
+    prefix: &6&lRaceClicker &8»
+    # Season settings
+    season_duration: 3 months # Duration of each season
+    season_start: "2025-01-01" # Start date of first season
+    
+    # Season types
+    season_types:
+        - "Spring Sprint"
+        - "Summer Speed"
+        - "Autumn Achievement"
+        - "Winter Wonder"
+        - "Spring Special"
+        - "Summer Spectacular"
+        - "Autumn Adventure"
+        - "Winter Wonders"
+    
+    # Season rewards
+    season_rewards:
+        bronze: 1000
+        silver: 2500
+        gold: 5000
+        platinum: 10000
+        diamond: 20000
+    
+    # Season requirements
+    season_requirements:
+        bronze: 10000
+        silver: 50000
+        gold: 100000
+        platinum: 250000
+        diamond: 500000
+    
+    # Seasonal bonuses
+    seasonal_bonuses:
+        spring: 1.2
+        summer: 1.3
+        autumn: 1.4
+        winter: 1.5
+
+# Variables:
+# {season::current_season} = text (current season)
+# {season::start_date} = text (season start date)
+# {season::end_date} = text (season end date)
+# {player::%uuid%::season_points} = number (season points)
+# {player::%uuid%::season_rank} = text (season rank)
+# {player::%uuid%::season_rewards} = number (season rewards)
+
+# Function to start season
+every {@season_duration}:
+    set {_date} to date now
+    set {_month} to month of {_date}
+    
+    # Determine season type
+    if {_month} is "january", "february", or "march":
+        set {_season} to "Spring Sprint"
+    else if {_month} is "april", "may", or "june":
+        set {_season} to "Summer Speed"
+    else if {_month} is "july", "august", or "september":
+        set {_season} to "Autumn Achievement"
+    else if {_month} is "october", "november", or "december":
+        set {_season} to "Winter Wonder"
+    
+    # Start new season
+    startSeason({_season})
+
+# Function to start season
+function startSeason(season: text):
+    # Set season dates
+    set {_start_date} to date now
+    set {_end_date} to {_start_date} + {@season_duration}
+    
+    # Update season variables
+    set {season::current_season} to {_season}
+    set {season::start_date} to {_start_date}
+    set {season::end_date} to {_end_date}
+    
+    # Announce season start
+    broadcast "{@prefix} &6Season Announcement: %{_season}% has begun!" to all players
+    broadcast "{@prefix} &6Duration: %{_end_date}%" to all players
+    broadcast "{@prefix} &6Rewards: Up to %{@season_rewards::diamond}% ClickCoins!" to all players
+    
+    # Distribute rewards from previous season
+    if {season::current_season} is set:
+        loop all players:
+            set {_p} to loop-value
+            set {_uuid} to {_p}'s uuid
+            if {player::%{_uuid}%::season_rewards} > 0:
+                add {player::%{_uuid}%::season_rewards} to {player::%{_uuid}%::clickcoins}
+                send "{@prefix} &aReceived %{player::%{_uuid}%::season_rewards}% ClickCoins from last season!" to {_p}
+                set {player::%{_uuid}%::season_rewards} to 0
+    
+    # Reset season points
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        set {player::%{_uuid}%::season_points} to 0
+        set {player::%{_uuid}%::season_rank} to "bronze"
+
+# Function to calculate season points
+every 1 tick:
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        
+        # Check if season is active
+        if not {season::current_season} is set:
+            return
+            
+        # Get player stats
+        if not {player::%{_uuid}%::clicks} is set:
+            set {player::%{_uuid}%::clicks} to 0
+        if not {player::%{_uuid}%::races} is set:
+            set {player::%{_uuid}%::races} to 0
+        if not {player::%{_uuid}%::wins} is set:
+            set {player::%{_uuid}%::wins} to 0
+            
+        set {_clicks} to {player::%{_uuid}%::clicks}
+        set {_races} to {player::%{_uuid}%::races}
+        set {_wins} to {player::%{_uuid}%::wins}
+        
+        # Calculate points
+        set {_points} to 0
+        add {_clicks} * 0.1 to {_points} # 0.1 point per click
+        add {_races} * 5 to {_points} # 5 points per race
+        add {_wins} * 10 to {_points} # 10 points per win
+        
+        # Apply seasonal bonus
+        set {_season} to {season::current_season}
+:start_line:133
+-------
+        if {_season} contains "Spring":
+            set {_points} to {_points} * {@seasonal_bonuses::spring}
+        else if {_season} contains "Summer":
+            set {_points} to {_points} * {@seasonal_bonuses::summer}
+        else if {_season} contains "Autumn":
+            set {_points} to {_points} * {@seasonal_bonuses::autumn}
+        else if {_season} contains "Winter":
+            set {_points} to {_points} * {@seasonal_bonuses::winter}
+        
+        # Update points
+        add {_points} to {player::%{_uuid}%::season_points}
+        
+        # Reset stats
+        set {player::%{_uuid}%::clicks} to 0
+        set {player::%{_uuid}%::races} to 0
+        set {player::%{_uuid}%::wins} to 0
+            # Update season rank
+            updateSeasonRank({_p})
+
+# Function to update season rank
+function updateSeasonRank(p: player):
+    set {_uuid} to {_p}'s uuid
+    set {_points} to {player::%{_uuid}%::season_points}
+    
+    # Update rank based on points
+    if {_points} >= {@season_requirements::diamond}:
+        set {player::%{_uuid}%::season_rank} to "diamond"
+        set {player::%{_uuid}%::season_rewards} to {@season_rewards::diamond}
+    else if {_points} >= {@season_requirements::platinum}:
+        set {player::%{_uuid}%::season_rank} to "platinum"
+        set {player::%{_uuid}%::season_rewards} to {@season_rewards::platinum}
+    else if {_points} >= {@season_requirements::gold}:
+        set {player::%{_uuid}%::season_rank} to "gold"
+        set {player::%{_uuid}%::season_rewards} to {@season_rewards::gold}
+    else if {_points} >= {@season_requirements::silver}:
+        set {player::%{_uuid}%::season_rank} to "silver"
+        set {player::%{_uuid}%::season_rewards} to {@season_rewards::silver}
+    else:
+        set {player::%{_uuid}%::season_rank} to "bronze"
+        set {player::%{_uuid}%::season_rewards} to {@season_rewards::bronze}
+    
+    # Send rank update
+    send "{@prefix} &aSeason Rank: %{player::%{_uuid}%::season_rank}%" to {_p}
+    send "{@prefix} &aSeason Points: %{player::%{_uuid}%::season_points}%" to {_p}
+
+# Function to get season status
+function getSeasonStatus() :: text:
+    if {season::current_season} is not set:
+        return "&cNo season active!"
+    
+    set {_status} to "&6Season: %{season::current_season}%\n"
+    append "&eStart: &a%{season::start_date}%\n" to {_status}
+    append "&eEnd: &a%{season::end_date}%\n" to {_status}
+    append "&eRewards: &a%{@season_rewards::diamond}% ClickCoins\n" to {_status}
+    return {_status}
+
+# Command to view season status
+command /season:
+    trigger:
+        send "{@prefix} %{getSeasonStatus()}%" to player
+
+# Command to view season leaderboard
+command /seasonleaderboard:
+    trigger:
+        set {_leaderboard} to []
+        
+        # Get top players
+        loop all players sorted by {player::%{_uuid}%::season_points} descending:
+            if size of {_leaderboard} >= 10:
+                break
+            set {_p} to loop-value
+            set {_uuid} to {_p}'s uuid
+            add "&e%{_p}%: &a%{player::%{_uuid}%::season_points}% (%{player::%{_uuid}%::season_rank}%)" to {_leaderboard}
+        
+        # Send leaderboard
+        send "{@prefix} &6Season Leaderboard:" to player
+        loop {_leaderboard}:
+            send "&7- %{loop-value}%" to player
+
+# Seasonal achievements
+on season end:
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        set {_rank} to {player::%{_uuid}%::season_rank}
+        
+        # Give season rewards
+        add {player::%{_uuid}%::season_rewards} to {player::%{_uuid}%::clickcoins}
+        
+        # Unlock season achievements
+        unlockSeasonAchievement({_p}, {_rank})
+        
+        # Reset season stats
+        set {player::%{_uuid}%::season_points} to 0
+        set {player::%{_uuid}%::season_rank} to "bronze"
+        set {player::%{_uuid}%::season_rewards} to 0
+
+# Function to unlock season achievement
+function unlockSeasonAchievement(p: player, rank: text):
+    set {_uuid} to {_p}'s uuid
+    set {_achievement} to "Season %{rank}%"
+    
+    # Unlock achievement
+    set {player::%{_uuid}%::achievements::%{_achievement.lower}%} to true
+    
+    # Give achievement reward
+    giveAchievementReward({_p}, {_achievement})
+    
+    # Send achievement message
+    send "{@prefix} &aUnlocked Achievement: %{_achievement}%" to {_p}
+    broadcast "{@prefix} &6%{_p}% unlocked achievement: %{_achievement}%" to players with permission "raceclicker.achievements"
+
+# Function to give achievement reward
+# Removing duplicate function since it exists in event_system.sk
+    set {_uuid} to {_p}'s uuid
+    
+    # Base reward
+    set {_reward} to 100
+    
+    # Special rewards
+    switch achievement:
+        case "Season Diamond":
+            set {_reward} to 500
+            break
+        case "Season Platinum":
+            set {_reward} to 300
+            break
+        case "Season Gold":
+            set {_reward} to 200
+            break
+    
+    # Add reward
+    add {_reward} to {player::%{_uuid}%::clickcoins}
+    send "{@prefix} &aEarned %{@achievement_bonus}% ClickCoins for achievement!" to {_p}
+
+# Seasonal events
+on season start:
+    # Generate season-specific events
+    set {_event_count} to random number between 3 and 5
+    loop {_event_count} times:
+        set {_event_id} to "season_event_%{loop-index}%"
+        
+        # Choose random event type
+        set {_type} to random element of {@event_types::*}
+        
+        # Set event parameters
+        switch {_type}:
+            case "Double Clicks":
+                set {_duration} to random number between 30 and 60
+                set {_reward} to random number between 1000 and 5000
+                break
+            case "Speed Boost":
+                set {_duration} to random number between 15 and 30
+                set {_reward} to random number between 2000 and 8000
+                break
+            case "Power Surge":
+                set {_duration} to random number between 20 and 40
+                set {_reward} to random number between 1500 and 7000
+                break
+        
+        # Store event data
+        set {event::%{_event_id}%::type} to {_type}
+        set {event::%{_event_id}%::duration} to {_duration}
+        set {event::%{_event_id}%::reward} to {_reward}
+        set {event::%{_event_id}%::start_time} to now + (loop-index * 24 hours)
+        
+        # Announce event
+        broadcast "{@prefix} &6Season Event: %{_type}% starting in %{_duration}% minutes!" to all players
+
+# Seasonal rewards
+on season end:
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        
+        # Give season rewards
+        add {player::%{_uuid}%::season_rewards} to {player::%{_uuid}%::clickcoins}
+        
+        # Give special season rewards
+        if {player::%{_uuid}%::season_rank} is "diamond":
+            giveSeasonReward({_p}, "diamond")
+        else if {player::%{_uuid}%::season_rank} is "platinum":
+            giveSeasonReward({_p}, "platinum")
+        else if {player::%{_uuid}%::season_rank} is "gold":
+            giveSeasonReward({_p}, "gold")
+
+# Function to give season reward
+function giveSeasonReward(p: player, rank: text):
+    set {_uuid} to {_p}'s uuid
+    
+    # Give rank-specific rewards
+    switch rank:
+        case "diamond":
+            add 10000 to {player::%{_uuid}%::clickcoins}
+            add 10 to {player::%{_uuid}%::prestige_level}
+            break
+        case "platinum":
+            add 5000 to {player::%{_uuid}%::clickcoins}
+            add 5 to {player::%{_uuid}%::prestige_level}
+            break
+        case "gold":
+            add 2000 to {player::%{_uuid}%::clickcoins}
+            add 2 to {player::%{_uuid}%::prestige_level}
+            break
+    
+    # Send reward message
+    send "{@prefix} &aReceived %{rank}% season rewards!" to {_p}
+
+# Seasonal challenges
+on season start:
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        
+        # Generate season challenges
+        set {_challenge_count} to random number between 3 and 5
+        loop {_challenge_count} times:
+            set {_challenge_id} to "season_challenge_%{loop-index}%"
+            
+            # Choose random challenge type
+            set {_type} to random element of {@challenge_types::*}
+            
+            # Set challenge parameters
+            switch {_type}:
+                case "Click Challenge":
+                    set {_target} to random number between 100000 and 500000
+                    set {_reward} to random number between 1000 and 5000
+                    break
+                case "Race Challenge":
+                    set {_target} to random number between 10 and 50
+                    set {_reward} to random number between 2000 and 8000
+                    break
+                case "Track Challenge":
+                    set {_target} to random number between 20 and 100
+                    set {_reward} to random number between 1500 and 7000
+                    break
+            
+            # Store challenge data
+            set {challenge::%{_challenge_id}%::type} to {_type}
+            set {challenge::%{_challenge_id}%::target} to {_target}
+            set {challenge::%{_challenge_id}%::reward} to {_reward}
+            add {_challenge_id} to {player::%{_uuid}%::season_challenges::*}
+            
+            # Send challenge notification
+            send "{@prefix} &aNew season challenge: %{_type}% (%{_target}% target)" to {_p}
+
+# Seasonal achievements
+on season end:
+    loop all players:
+        set {_p} to loop-value
+        set {_uuid} to {_p}'s uuid
+        
+        # Check season achievements
+        loop [1, 2, 3, 4, 5]:
+            if {player::%{_uuid}%::season_challenges_completed} >= loop-value:
+                if {player::%{_uuid}%::achievements::season_challenges_%{loop_value}%} is not true:
+                    unlockAchievement({_p}, "Season Challenge %{loop-value}%")
+
+# Seasonal rewards GUI
+command /seasonrewards:
+    trigger:
+        set {_uuid} to player's uuid
+        
+        # Create GUI
+        open chest with 6 rows named "&6Season Rewards" to player
+        
+        # Add reward items
+        set {_slot} to 0
+        loop all ranks:
+            set {_rank} to loop-value
+            set {_reward} to {@season_rewards::%{_rank}%}
+            
+            # Create item
+            set {_item} to diamond
+            if {_rank} is "diamond":
+                set {_item} to diamond_block
+            else if {_rank} is "platinum":
+                set {_item} to netherite_ingot
+            else if {_rank} is "gold":
+                set {_item} to gold_ingot
+            else if {_rank} is "silver":
+                set {_item} to iron_ingot
+            else:
+                set {_item} to copper_ingot
+            
+            # Add item to GUI
+            set slot {_slot} of player's current inventory to {_item} named "&6%{_rank}% Rank" with lore "&eClickCoins: &a%{_reward}%" and "&eRequired Points: &a%{@season_requirements::%{_rank}%}%"
+            
+            add 1 to {_slot}
+        
+        # Add close button
+        set slot 53 of player's current inventory to red_stained_glass_pane named "&cClose" with lore "&eClick to close"
+
+# Seasonal effects
+every 1 tick:
+    if {season::current_season} is set:
+        loop all players:
+            set {_p} to loop-value
+            set {_uuid} to {_p}'s uuid
+            
+            # Apply season-specific effects
+            switch {season::current_season}:
+                case "Spring Sprint":
+                    set {_speed} to {player::%{_uuid}%::speed} * {@seasonal_bonuses::spring}
+                    set {player::%{_uuid}%::speed} to {_speed}
+                    break
+                case "Summer Speed":
+                    set {_power} to {player::%{_uuid}%::power} * {@seasonal_bonuses::summer}
+                    set {player::%{_uuid}%::power} to {_power}
+                    break
+                case "Autumn Achievement":
+                    set {_accuracy} to {player::%{_uuid}%::accuracy} * {@seasonal_bonuses::autumn}
+                    set {player::%{_uuid}%::accuracy} to {_accuracy}
+                    break
+                case "Winter Wonder":
+                    set {_combo} to {player::%{_uuid}%::combo} * {@seasonal_bonuses::winter}
+                    set {player::%{_uuid}%::combo} to {_combo}
+                    break
