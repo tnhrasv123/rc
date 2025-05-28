@@ -1,0 +1,32 @@
+name: RaceClicker
+version: 1.0.0
+main: com.raceclicker.RaceClickerPlugin
+api-version: 1.16 # Corresponds to Spigot API 1.16.5 in pom.xml
+author: YourName # You can change this
+description: A Race Clicker plugin with achievements and more.
+
+commands:
+  achievements:
+    description: Shows your unlocked achievements and progress.
+    usage: /achievements
+    permission: raceclicker.achievements.view
+  achievementinfo:
+    description: Shows detailed information about a specific achievement.
+    usage: /achievementinfo <achievement_id>
+    permission: raceclicker.achievements.view
+  rcadmin:
+    description: Admin commands for RaceClicker.
+    usage: /rcadmin <subcommand> [args...]
+    permission: raceclicker.admin
+  shop:
+    description: Opens the RaceClicker shop.
+    usage: /shop
+    permission: raceclicker.shop.use
+
+permissions:
+  raceclicker.achievements.view:
+    description: Allows viewing achievements.
+    default: true
+  raceclicker.admin:
+    description: Allows access to RaceClicker admin commands.
+    default: op
